@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "id": "ios",
+  "aliases": [
+    "swift-ios",
+    "xcode"
+  ],
+  "name": "iOS Mobile Application",
+  "domain": "mobile",
+  "description": "Hồ sơ điều phối cho ứng dụng iOS/Swift sử dụng Xcode và iOS Simulator.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "xcodebuild",
+      "binary": "xcodebuild",
+      "required": true,
+      "description": "Công cụ dòng lệnh Xcode để build và chạy XCTest trên Simulator."
+    },
+    {
+      "name": "xcrun",
+      "binary": "xcrun",
+      "required": true,
+      "description": "Trình điều khiển công cụ Xcode và iOS Simulator (xcrun simctl)."
+    },
+    {
+      "name": "swift",
+      "binary": "swift",
+      "required": false,
+      "description": "Trình biên dịch và kiểm thử Swift Package Manager."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "ios-xcodebuild-test",
+      "command_example": "xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Biên dịch và chạy XCTest trên iOS Simulator theo scheme thực tế của repo."
+    },
+    {
+      "id": "ios-swift-package-test",
+      "command_example": "swift test",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy kiểm thử đơn vị cho các Swift package độc lập trong dự án."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của lệnh xcodebuild hoặc swift test do repo chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Vi phạm cô lập luồng giao diện (@MainActor / main thread) gây crash lúc chạy",
+    "Rò rỉ bộ nhớ do retain cycle trong closure hoặc Combine/async stream",
+    "Thay đổi ngoài ý muốn đối với code signing, entitlements hoặc quyền riêng tư trong Info.plist"
+  ],
+  "quant_escalation_required_when": [
+    "Tính toán hoặc xác thực logic PnL, funding, liquidation, margin hoặc risk ngay trên ứng dụng"
+  ]
+}

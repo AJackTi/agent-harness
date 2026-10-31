@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "id": "android",
+  "aliases": [
+    "kotlin-android",
+    "gradle-android"
+  ],
+  "name": "Android Mobile Application",
+  "domain": "mobile",
+  "description": "Hồ sơ điều phối cho ứng dụng Android/Kotlin sử dụng Gradle và Android Emulator.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "gradle",
+      "binary": "gradle",
+      "required": true,
+      "description": "Hệ thống build Gradle (trong repo tiêu thụ thường gọi qua ./gradlew)."
+    },
+    {
+      "name": "adb",
+      "binary": "adb",
+      "required": false,
+      "description": "Android Debug Bridge để giao tiếp với thiết bị ảo (emulator)."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "android-unit-test",
+      "command_example": "./gradlew testDebugUnitTest",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy kiểm thử đơn vị Android trên JVM."
+    },
+    {
+      "id": "android-lint",
+      "command_example": "./gradlew lintDebug",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Phân tích tĩnh phát hiện lỗi vòng đời, tài nguyên và bảo mật trên Android."
+    },
+    {
+      "id": "android-instrumented-test",
+      "command_example": "./gradlew connectedDebugAndroidTest",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy kiểm thử tích hợp trên Android Emulator (nếu repo yêu cầu)."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của tác vụ Gradle test/lint do repo chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Rò rỉ Activity/View Context khi xoay màn hình hoặc hủy CoroutineScope sai vòng đời",
+    "Thực hiện I/O hoặc giải mã nặng trên Dispatchers.Main gây ANR",
+    "Thay đổi quyền (permissions), exported components trong AndroidManifest.xml hoặc cấu hình ProGuard/R8"
+  ],
+  "quant_escalation_required_when": [
+    "Tính toán hoặc xác thực logic PnL, funding, liquidation, margin hoặc risk ngay trên ứng dụng"
+  ]
+}

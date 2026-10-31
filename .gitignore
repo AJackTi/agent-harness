@@ -1,0 +1,37 @@
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated proof artifacts and run outputs
+proof-output/
+runs/
+artifacts/
+*.proof.json
+*.run.log
+
+# Local configuration, secrets, and credentials
+.env
+.env.*
+*.pem
+*.key
+secrets/
+credentials/
+*.local.json
+repo-context.local.json
+
+# OS / Editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp

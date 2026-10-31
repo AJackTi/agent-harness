@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0.0",
+  "id": "backend/golang",
+  "aliases": [
+    "backend-golang",
+    "golang",
+    "go"
+  ],
+  "name": "Backend Golang",
+  "domain": "backend",
+  "description": "Hồ sơ điều phối cho dịch vụ backend Go với trọng tâm an toàn đồng thời (concurrency) và xử lý lỗi tường minh.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "go",
+      "binary": "go",
+      "required": true,
+      "description": "Chuỗi công cụ Go (build, test, vet)."
+    },
+    {
+      "name": "golangci-lint",
+      "binary": "golangci-lint",
+      "required": false,
+      "description": "Bộ công cụ phân tích tĩnh tổng hợp cho Go (nếu repo tiêu thụ sử dụng)."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "go-vet",
+      "command_example": "go vet ./...",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Phân tích tĩnh mã nguồn Go bằng công cụ chuẩn."
+    },
+    {
+      "id": "go-test",
+      "command_example": "go test ./...",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy toàn bộ unit test trong module Go."
+    },
+    {
+      "id": "go-test-race",
+      "command_example": "go test -race ./...",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy kiểm thử kèm bộ phát hiện data race của Go."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của lệnh go test / go vet đã được chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check sạch lỗi khoảng trắng",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Data race trên biến hoặc map chia sẻ giữa nhiều goroutine",
+    "Goroutine leak do channel bị chặn hoặc thiếu hủy context.Context",
+    "Bỏ qua kiểm tra lỗi trả về (err) hoặc đóng tài nguyên (defer Close) sai vị trí"
+  ],
+  "quant_escalation_required_when": [
+    "Tính toán PnL, funding rate, thanh lý (liquidation), khớp lệnh định lượng hoặc rủi ro tài chính"
+  ]
+}

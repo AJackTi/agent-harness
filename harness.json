@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0.0",
+  "name": "ajackti-agent-harness",
+  "description": "Khung điều phối agent cá nhân đa miền (multi-domain agent harness) của AJACKTI với chính sách external-first agy và hồ sơ miền khả tổ hợp.",
+  "policy_path": "core/policy.json",
+  "entrypoints": {
+    "agents": "AGENTS.md",
+    "claude": "CLAUDE.md",
+    "quant_agents": "quant/AGENTS.md",
+    "cli": "scripts/harness.py"
+  },
+  "templates": {
+    "task_packet": "templates/task.md",
+    "proof_pack": "templates/proof-pack.md",
+    "repo_context": "templates/repo-context.json",
+    "consumer_agents": "core/AGENTS.template.md"
+  },
+  "system_tools": [
+    {
+      "name": "agy",
+      "binary": "agy",
+      "required_for": "execution",
+      "description": "External Antigravity CLI dùng cho worker và fresh reviewer (ghim gemini-4-argon-high --effort high)."
+    },
+    {
+      "name": "jev-pool",
+      "binary": "jev-pool",
+      "required_for": "triage",
+      "description": "Công cụ Jev (jev-1.13.0) phân loại bằng chứng kiểu hóa và độ bất định (chỉ đọc, không sửa file)."
+    }
+  ],
+  "profiles": [
+    {
+      "id": "backend/typescript",
+      "path": "backend/typescript",
+      "profile_file": "backend/typescript/profile.json",
+      "readme_file": "backend/typescript/README.md",
+      "domain": "backend",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "backend/golang",
+      "path": "backend/golang",
+      "profile_file": "backend/golang/profile.json",
+      "readme_file": "backend/golang/README.md",
+      "domain": "backend",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "backend/rust",
+      "path": "backend/rust",
+      "profile_file": "backend/rust/profile.json",
+      "readme_file": "backend/rust/README.md",
+      "domain": "backend",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "frontend",
+      "path": "frontend",
+      "profile_file": "frontend/profile.json",
+      "readme_file": "frontend/README.md",
+      "domain": "frontend",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "dashboard",
+      "path": "dashboard",
+      "profile_file": "dashboard/profile.json",
+      "readme_file": "dashboard/README.md",
+      "domain": "dashboard",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "ios",
+      "path": "ios",
+      "profile_file": "ios/profile.json",
+      "readme_file": "ios/README.md",
+      "domain": "mobile",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "android",
+      "path": "android",
+      "profile_file": "android/profile.json",
+      "readme_file": "android/README.md",
+      "domain": "mobile",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "quant",
+      "path": "quant",
+      "profile_file": "quant/profile.json",
+      "readme_file": "quant/README.md",
+      "domain": "quant",
+      "work_kind": "quant",
+      "runner_id": "antigravity-sol-quant-runner"
+    },
+    {
+      "id": "devops",
+      "path": "devops",
+      "profile_file": "devops/profile.json",
+      "readme_file": "devops/README.md",
+      "domain": "devops",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    },
+    {
+      "id": "data",
+      "path": "data",
+      "profile_file": "data/profile.json",
+      "readme_file": "data/README.md",
+      "domain": "data",
+      "work_kind": "task",
+      "runner_id": "antigravity-task-runner"
+    }
+  ]
+}

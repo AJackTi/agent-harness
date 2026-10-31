@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0.0",
+  "id": "backend/rust",
+  "aliases": [
+    "backend-rust",
+    "rust"
+  ],
+  "name": "Backend Rust",
+  "domain": "backend",
+  "description": "Hồ sơ điều phối cho dịch vụ backend Rust với yêu cầu an toàn bộ nhớ, kiểu nghiêm ngặt và không panic ngầm.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "cargo",
+      "binary": "cargo",
+      "required": true,
+      "description": "Trình quản lý gói và kiểm thử Rust Cargo."
+    },
+    {
+      "name": "rustc",
+      "binary": "rustc",
+      "required": true,
+      "description": "Trình biên dịch Rust."
+    },
+    {
+      "name": "rustfmt",
+      "binary": "rustfmt",
+      "required": false,
+      "description": "Công cụ kiểm tra định dạng mã nguồn Rust."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "cargo-check",
+      "command_example": "cargo check --all-targets",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra biên dịch và hệ thống kiểu trên toàn bộ targets."
+    },
+    {
+      "id": "cargo-test",
+      "command_example": "cargo test",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy toàn bộ unit và integration test trong workspace Cargo."
+    },
+    {
+      "id": "cargo-clippy",
+      "command_example": "cargo clippy --all-targets -- -D warnings",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Phân tích tĩnh phát hiện lỗi logic và phản mẫu trong Rust."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của lệnh cargo check / cargo test đã được chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Sử dụng unwrap() hoặc expect() trên đường thực thi sản phẩm gây panic",
+    "Đưa khối unsafe vào mã nguồn khi không có lý do bắt buộc và chứng minh bất biến",
+    "Tràn số (integer overflow) hoặc làm tròn sai trong các phép tính định điểm"
+  ],
+  "quant_escalation_required_when": [
+    "Tính toán PnL, funding rate, thanh lý (liquidation), công cụ định giá hoặc quản trị rủi ro"
+  ]
+}

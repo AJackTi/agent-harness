@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "id": "backend/typescript",
+  "aliases": [
+    "backend-typescript",
+    "typescript"
+  ],
+  "name": "Backend TypeScript",
+  "domain": "backend",
+  "description": "Hồ sơ điều phối cho dịch vụ backend TypeScript/Node.js với kiểm tra kiểu nghiêm ngặt và kiểm thử tại repo.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "node",
+      "binary": "node",
+      "required": true,
+      "description": "Node.js runtime cho dịch vụ và công cụ kiểm thử TypeScript."
+    },
+    {
+      "name": "tsc",
+      "binary": "tsc",
+      "required": false,
+      "description": "Trình biên dịch TypeScript để kiểm tra kiểu tĩnh (có thể gọi qua package runner của repo)."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "ts-typecheck",
+      "command_example": "npx tsc --noEmit",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra kiểu tĩnh TypeScript không sinh file build."
+    },
+    {
+      "id": "ts-unit-test",
+      "command_example": "npm test",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Chạy bộ kiểm thử đơn vị do repository tiêu thụ định nghĩa."
+    },
+    {
+      "id": "ts-lint",
+      "command_example": "npm run lint",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra quy chuẩn mã nguồn theo cấu hình linter của dự án."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của lệnh typecheck và test đã được chấp thuận",
+    "Kết quả kiểm tra phạm vi file thay đổi (scope) và git diff --check",
+    "Báo cáo phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Sử dụng any hoặc ép kiểu không an toàn làm vô hiệu hóa hệ thống kiểu TypeScript",
+    "Rò rỉ promise không được bắt lỗi (unhandled rejections) hoặc nghẽn event loop",
+    "Làm lệch hợp đồng dữ liệu API/DTO hoặc sử dụng số thực dấu phẩy động cho tiền tệ"
+  ],
+  "quant_escalation_required_when": [
+    "Tính toán PnL, funding rate, thanh lý (liquidation), margin, leverage hoặc rủi ro danh mục"
+  ]
+}

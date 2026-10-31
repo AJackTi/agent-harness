@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "template_status": "UNRESOLVED",
+  "ready_for_execution": false,
+  "consumer_repo": {
+    "name": "<UNRESOLVED:CONSUMER_REPO_NAME>",
+    "workdir": "<UNRESOLVED:ABSOLUTE_CONSUMER_WORKSPACE_PATH>",
+    "selected_profiles": [
+      "<UNRESOLVED:PROFILE_ID>"
+    ],
+    "work_kind": "<UNRESOLVED:task_OR_quant>"
+  },
+  "consumer_acceptance": {
+    "commands_accepted_by_owner": false,
+    "accepted_by": "<UNRESOLVED:REPO_OWNER_HANDLE>",
+    "accepted_verify_cmds": [
+      "<UNRESOLVED:ACCEPTED_VERIFY_COMMAND>"
+    ],
+    "allowed_scope": [
+      "<UNRESOLVED:RELATIVE_SCOPE_FILE>"
+    ],
+    "output_dir_outside_workdir": "<UNRESOLVED:ABSOLUTE_OUTPUT_DIR_OUTSIDE_WORKDIR>"
+  },
+  "quant_seam_declaration": {
+    "involves_pnl_funding_liquidation_or_risk": "<UNRESOLVED:BOOLEAN_REQUIRED>",
+    "requires_explicit_quant_profile": true,
+    "notes": "Nếu tác vụ trên dashboard hoặc data chạm vào PnL, funding, liquidation, margin hoặc risk thì bắt buộc khai báo work_kind=quant và chọn profile quant."
+  }
+}

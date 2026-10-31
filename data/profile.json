@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "id": "data",
+  "aliases": [
+    "data-engineering",
+    "data-quality",
+    "etl"
+  ],
+  "name": "Data Engineering & Data Quality",
+  "domain": "data",
+  "description": "Hồ sơ điều phối cho đường ống ETL/ELT, schema migration và kiểm định chất lượng dữ liệu (data quality).",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "python3",
+      "binary": "python3",
+      "required": true,
+      "description": "Runtime thực thi các bài kiểm tra chất lượng dữ liệu (data quality) và biến đổi schema."
+    },
+    {
+      "name": "sqlite3",
+      "binary": "sqlite3",
+      "required": false,
+      "description": "Công cụ kiểm thử truy vấn SQL cục bộ và xác thực ràng buộc bảng."
+    },
+    {
+      "name": "dbt",
+      "binary": "dbt",
+      "required": false,
+      "description": "Công cụ mô hình hóa và kiểm định chất lượng dữ liệu tùy chọn (nếu repo tiêu thụ sử dụng)."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "data-quality-tests",
+      "command_example": "python3 -m unittest discover -s tests/data_quality -v",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra ràng buộc khóa chính, tỷ lệ NULL, kiểu dữ liệu và tính toàn vẹn tham chiếu."
+    },
+    {
+      "id": "data-idempotency-check",
+      "command_example": "python3 scripts/verify_pipeline_idempotency.py",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Đảm bảo chạy lại cùng một phân vùng dữ liệu không sinh bản ghi trùng lặp."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của các bài kiểm tra data quality và schema do repo chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Thay đổi schema phá vỡ tương thích ngược (breaking schema drift) đối với các bảng hạ nguồn",
+    "Nhân bản bản ghi khi backfill hoặc lệch múi giờ tại ranh giới phân vùng ngày (UTC vs local)",
+    "Tính toán ngầm chỉ số tài chính (PnL/funding/risk) trong đường ống ETL mà không kích hoạt profile quant"
+  ],
+  "quant_escalation_required_when": [
+    "Bất kỳ tác vụ data nào tính toán hoặc biến đổi PnL, funding, liquidation, margin, leverage hoặc chỉ số rủi ro đều bắt buộc chọn tường minh profile quant và --work-kind quant"
+  ]
+}

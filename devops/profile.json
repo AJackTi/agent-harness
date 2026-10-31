@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0.0",
+  "id": "devops",
+  "aliases": [
+    "infra",
+    "iac",
+    "cicd"
+  ],
+  "name": "DevOps & Infrastructure as Code",
+  "domain": "devops",
+  "description": "Hồ sơ điều phối cho IaC, container và CI/CD với kiểm tra cú pháp offline và ranh giới bảo vệ live configs/credentials.",
+  "extends": [],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "terraform",
+      "binary": "terraform",
+      "required": true,
+      "description": "Công cụ kiểm tra định dạng và tính hợp lệ của Infrastructure as Code (IaC)."
+    },
+    {
+      "name": "docker",
+      "binary": "docker",
+      "required": false,
+      "description": "Công cụ đóng gói và kiểm tra cấu hình container."
+    },
+    {
+      "name": "kubectl",
+      "binary": "kubectl",
+      "required": false,
+      "description": "CLI kiểm tra manifest Kubernetes (chế độ dry-run/client)."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "iac-terraform-validate",
+      "command_example": "terraform validate",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Xác thực cấu hình Terraform offline mà không kết nối tới cloud state."
+    },
+    {
+      "id": "iac-terraform-fmt",
+      "command_example": "terraform fmt -check -recursive",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra định dạng chuẩn của các file .tf."
+    },
+    {
+      "id": "harness-config-validate",
+      "command_example": "python3 scripts/harness.py validate",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Xác thực cấu hình JSON, profiles, templates và liên kết Markdown của harness (không kiểm tra cú pháp CI của repo tiêu thụ)."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của lệnh kiểm tra IaC/CI offline do repo chấp thuận",
+    "Bằng chứng không chạm vào credentials, endpoints, live configs hoặc safety gates",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Vô tình gọi lệnh tác động môi trường thật (terraform apply, kubectl apply, docker push)",
+    "Làm lộ khóa bí mật (secrets/credentials) hoặc mở rộng quyền IAM quá mức (over-permissive policies)",
+    "Thay đổi live endpoints hoặc tắt các bước kiểm tra bảo mật trong CI/CD"
+  ],
+  "quant_escalation_required_when": [
+    "Thay đổi cấu hình hạ tầng ảnh hưởng tới tham số risk, margin, leverage hoặc đường ống thực thi định lượng"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0.0",
+  "id": "dashboard",
+  "aliases": [
+    "admin-dashboard",
+    "analytics-ui"
+  ],
+  "name": "Analytics & Operations Dashboard",
+  "domain": "dashboard",
+  "description": "Hồ sơ mở rộng từ frontend chuyên cho bảng điều khiển với kiểm tra dữ liệu (data), bộ lọc (filter), múi giờ (timezone) và phân quyền (RBAC).",
+  "extends": [
+    "frontend"
+  ],
+  "work_kind": "task",
+  "runner_route": {
+    "runner_id": "antigravity-task-runner",
+    "work_kind": "task",
+    "min_reviewers": 1,
+    "max_reworks": 2,
+    "execution_status": "ready_when_runner_installed"
+  },
+  "tools": [
+    {
+      "name": "node",
+      "binary": "node",
+      "required": true,
+      "description": "Node.js runtime kế thừa từ frontend cho build, typecheck và kiểm thử."
+    },
+    {
+      "name": "playwright",
+      "binary": "playwright",
+      "required": false,
+      "description": "Browser automation để kiểm chứng bảng biểu, bộ lọc, timezone và luồng RBAC."
+    }
+  ],
+  "candidate_checks": [
+    {
+      "id": "dashboard-data-filter-tz-tests",
+      "command_example": "npm test -- --grep \"data|filter|timezone|rbac\"",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm thử đơn vị cho bộ biến đổi dữ liệu, đồng bộ bộ lọc, chuyển đổi múi giờ (UTC/local) và RBAC."
+    },
+    {
+      "id": "dashboard-build",
+      "command_example": "npm run build",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm tra biên dịch và đóng gói giao diện dashboard theo cấu hình repo."
+    },
+    {
+      "id": "dashboard-e2e-rbac",
+      "command_example": "npx playwright test",
+      "status": "example_unverified",
+      "requires_consumer_acceptance": true,
+      "description": "Kiểm thử trình duyệt cho phân quyền hiển thị (RBAC) và tương tác bộ lọc."
+    }
+  ],
+  "expected_evidence": [
+    "Mã thoát thực tế (exit code) của các bài kiểm tra data, filter, timezone, RBAC và build do repo chấp thuận",
+    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
+    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+  ],
+  "special_risks": [
+    "Sai lệch múi giờ (UTC vs local timezone) làm nhảy ngày trên biểu đồ hoặc báo cáo theo phiên",
+    "Trạng thái bộ lọc (filter/pagination/sort) bị mất đồng bộ hoặc dính dữ liệu cũ khi chuyển trang",
+    "Kiểm tra RBAC chỉ ẩn phần tử DOM nhưng vẫn tải hoặc lộ dữ liệu nhạy cảm trong state/network",
+    "Hiển thị số liệu tài chính (PnL/funding/risk) mà không kích hoạt profile quant và --work-kind quant"
+  ],
+  "quant_escalation_required_when": [
+    "Bất kỳ tác vụ dashboard nào liên quan tới PnL, funding, liquidation, margin, leverage hoặc chỉ số rủi ro đều bắt buộc chọn tường minh profile quant và --work-kind quant"
+  ]
+}

@@ -1,0 +1,154 @@
+{
+  "schema_version": "1.0.0",
+  "policy_id": "ajackti-core-policy",
+  "description": "Chính sách lõi dùng chung cho toàn bộ domain profiles trong AJACKTI Agent Harness.",
+  "execution_model": {
+    "mode": "external-first",
+    "worker_cli": "agy",
+    "coordinator_role": "chatgpt-coordinates-and-final-reviews-only",
+    "allow_local_fallback": false,
+    "allow_internal_coding_without_exception": false,
+    "pinned_model": "gemini-4-argon-high",
+    "pinned_effort": "high",
+    "effort_slug_fallback": "-high",
+    "permission_mode": "request-review",
+    "resume_worker": false,
+    "required_runner_flags": [
+      "--no-resume-worker"
+    ],
+    "forbid_model_override": true,
+    "forbid_effort_override": true
+  },
+  "worker_validation": {
+    "require_exit_zero": true,
+    "require_exact_init_model": "gemini-4-argon-high",
+    "required_result_status": "SUCCESS",
+    "require_nonempty_response": true,
+    "forbid_denial": true,
+    "require_init_effort_high_or_flag_and_slug": true,
+    "fail_closed_conditions": [
+      "missing_cli",
+      "missing_model",
+      "model_mismatch",
+      "permission_denial",
+      "timeout",
+      "quota_error",
+      "auth_error"
+    ]
+  },
+  "pipeline": {
+    "ordered_stages": [
+      "external_agy_worker",
+      "repo_native_mechanical_checks",
+      "jev_typed_evidence_triage",
+      "fresh_pinned_reviewers",
+      "chatgpt_final_review"
+    ],
+    "jev": {
+      "binary": "jev-pool",
+      "version": "jev-1.13.0",
+      "role": "typed_evidence_and_uncertainty_triage_only",
+      "allow_file_edits": false
+    },
+    "reviewers": {
+      "task_min_reviewers": 1,
+      "quant_min_reviewers": 2,
+      "fresh_same_model_semantics": "independent_not_stronger"
+    },
+    "max_reworks": 2,
+    "default_worker_timeout_seconds": 1800,
+    "reporting": {
+      "required_fields": [
+        "verdict",
+        "files",
+        "actual_check_exit_codes",
+        "confidence_below_100_percent",
+        "residual_uncertainty"
+      ],
+      "max_confidence_percent": 99
+    }
+  },
+  "runners": {
+    "task": {
+      "runner_id": "antigravity-task-runner",
+      "work_kind": "task",
+      "relative_script_path": "antigravity-task-runner/scripts/run_workflow.py",
+      "supported_flags": [
+        "--id",
+        "--workspace",
+        "--scope",
+        "--verify-cmd",
+        "--output-dir",
+        "--min-reviewers",
+        "--max-reworks",
+        "--worker-timeout",
+        "--no-resume-worker"
+      ],
+      "positional_packet": true,
+      "execution_enabled": true
+    },
+    "quant": {
+      "runner_id": "antigravity-sol-quant-runner",
+      "work_kind": "quant",
+      "relative_script_path": "antigravity-sol-quant-runner/scripts/run_workflow.py",
+      "execution_enabled": false,
+      "blocked_status": "BLOCKED",
+      "blocked_reason": "Tác vụ quant yêu cầu stronger reviewer; runner hiện tại chỉ cung cấp các fresh reviewer cùng model gemini-4-argon-high (độc lập nhưng không mạnh hơn).",
+      "unblock_requirement": "Cấu hình và chứng minh được một reviewer model/tier mạnh hơn gemini-4-argon-high trong antigravity-sol-quant-runner, sau đó được người dùng phê duyệt mở khóa tường minh trong core/policy.json."
+    }
+  },
+  "protected_boundaries": {
+    "forbidden_scope_prefixes": [
+      ".git",
+      ".env",
+      "secrets",
+      "credentials"
+    ],
+    "protected_filenames": [
+      ".env",
+      ".env.local",
+      ".env.production",
+      "id_rsa",
+      "credentials.json"
+    ],
+    "harness_protected_files": [
+      "core/policy.json",
+      "harness.json",
+      "AGENTS.md",
+      "quant/AGENTS.md"
+    ],
+    "require_explicit_approval_for": [
+      "credentials",
+      "endpoints",
+      "live_configs",
+      "leverage",
+      "margin",
+      "safety_gates"
+    ],
+    "require_output_dir_outside_workspace": true
+  },
+  "quant_policy": {
+    "allow_quant_under_general_task": false,
+    "allow_classifier_override_of_quant_seam": false,
+    "required_invariants": [
+      "causal_provenance",
+      "realistic_friction",
+      "long_short_parity",
+      "deterministic_seeds_and_tests",
+      "stronger_reviewer"
+    ],
+    "quant_seam_keywords": [
+      "pnl",
+      "funding",
+      "liquidation",
+      "backtest",
+      "sharpe",
+      "drawdown",
+      "leverage",
+      "margin",
+      "slippage",
+      "risk-engine",
+      "financial-math"
+    ]
+  }
+}
