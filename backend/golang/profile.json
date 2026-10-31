@@ -8,7 +8,7 @@
   ],
   "name": "Backend Golang",
   "domain": "backend",
-  "description": "Hồ sơ điều phối cho dịch vụ backend Go với trọng tâm an toàn đồng thời (concurrency) và xử lý lỗi tường minh.",
+  "description": "Orchestration profile for Go backend services with a focus on concurrency safety and explicit error handling.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -23,13 +23,13 @@
       "name": "go",
       "binary": "go",
       "required": true,
-      "description": "Chuỗi công cụ Go (build, test, vet)."
+      "description": "Go toolchain (build, test, vet)."
     },
     {
       "name": "golangci-lint",
       "binary": "golangci-lint",
       "required": false,
-      "description": "Bộ công cụ phân tích tĩnh tổng hợp cho Go (nếu repo tiêu thụ sử dụng)."
+      "description": "Aggregated static analysis linter for Go (when used by the consumer repository)."
     }
   ],
   "candidate_checks": [
@@ -38,34 +38,34 @@
       "command_example": "go vet ./...",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Phân tích tĩnh mã nguồn Go bằng công cụ chuẩn."
+      "description": "Run standard static analysis on Go source code."
     },
     {
       "id": "go-test",
       "command_example": "go test ./...",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy toàn bộ unit test trong module Go."
+      "description": "Run all unit tests across the Go module."
     },
     {
       "id": "go-test-race",
       "command_example": "go test -race ./...",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy kiểm thử kèm bộ phát hiện data race của Go."
+      "description": "Run tests with the Go data race detector enabled."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của lệnh go test / go vet đã được chấp thuận",
-    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check sạch lỗi khoảng trắng",
-    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the accepted go test / go vet commands",
+    "Valid file scope verification and clean git diff --check whitespace output",
+    "Evidence triage report from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Data race trên biến hoặc map chia sẻ giữa nhiều goroutine",
-    "Goroutine leak do channel bị chặn hoặc thiếu hủy context.Context",
-    "Bỏ qua kiểm tra lỗi trả về (err) hoặc đóng tài nguyên (defer Close) sai vị trí"
+    "Data races on shared variables or maps accessed across multiple goroutines",
+    "Goroutine leaks caused by blocked channels or missing context.Context cancellation",
+    "Ignoring returned errors (err) or misplacing resource cleanup (defer Close)"
   ],
   "quant_escalation_required_when": [
-    "Tính toán PnL, funding rate, thanh lý (liquidation), khớp lệnh định lượng hoặc rủi ro tài chính"
+    "Computing PnL, funding rates, liquidation, quantitative order matching, or financial risk"
   ]
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "ajackti-agent-harness",
-  "description": "Khung điều phối agent cá nhân đa miền (multi-domain agent harness) của AJACKTI với chính sách external-first agy và hồ sơ miền khả tổ hợp.",
+  "description": "AJACKTI's personal multi-domain agent orchestration harness with an external-first agy policy and composable domain profiles.",
   "policy_path": "core/policy.json",
   "entrypoints": {
     "agents": "AGENTS.md",
@@ -20,13 +20,13 @@
       "name": "agy",
       "binary": "agy",
       "required_for": "execution",
-      "description": "External Antigravity CLI dùng cho worker và fresh reviewer (ghim gemini-4-argon-high --effort high)."
+      "description": "External Antigravity CLI used for worker and fresh reviewer (pinned to gemini-4-argon-high --effort high)."
     },
     {
       "name": "jev-pool",
       "binary": "jev-pool",
       "required_for": "triage",
-      "description": "Công cụ Jev (jev-1.13.0) phân loại bằng chứng kiểu hóa và độ bất định (chỉ đọc, không sửa file)."
+      "description": "Jev tool (jev-1.13.0) for typed evidence and uncertainty triage (read-only, no file edits)."
     }
   ],
   "profiles": [

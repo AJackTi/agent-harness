@@ -1,12 +1,12 @@
 # iOS Domain Profile (`ios`)
 
-Hồ sơ điều phối cho ứng dụng di động iOS / Swift / Xcode ([profile.json](profile.json)), kế thừa chính sách lõi tại [../core/policy.json](../core/policy.json).
+Orchestration profile for iOS / Swift / Xcode mobile applications ([profile.json](profile.json)), inheriting the core policy from [../core/policy.json](../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `xcodebuild`, `xcrun` (quản lý iOS Simulator qua `xcrun simctl`), `swift`.
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
+- **Primary tools**: `xcodebuild`, `xcrun` (managing iOS Simulator via `xcrun simctl`), `swift`.
+- **Suggested verification commands (`example_unverified`)**:
   - `xcodebuild test -scheme <Scheme> -destination 'platform=iOS Simulator,name=iPhone 16'`
-  - `swift test` (đối với các module Swift Package Manager độc lập)
-- **Bằng chứng kỳ vọng**: mã thoát thực tế của `xcodebuild`/`swift test` được repository tiêu thụ chấp thuận, kèm kiểm tra `scope` và `git diff --check`.
-- **Rủi ro đặc thù**: cập nhật UI ngoài `@MainActor`/main thread, chu kỳ tham chiếu mạnh (retain cycles) trong closure, thay đổi cấu hình signing/provisioning hoặc `Info.plist` ngoài phạm vi. Nếu có tính toán PnL/funding/liquidation/risk, bắt buộc chọn [../quant/README.md](../quant/README.md) (`--work-kind quant`).
+  - `swift test` (for standalone Swift Package Manager modules)
+- **Expected evidence**: actual exit codes of the `xcodebuild`/`swift test` commands accepted by the consumer repository, along with `scope` verification and `git diff --check`.
+- **Domain-specific risks**: UI updates outside `@MainActor`/main thread, strong reference cycles (retain cycles) in closures, and out-of-scope changes to signing/provisioning configuration or `Info.plist`. If the work involves PnL/funding/liquidation/risk calculations, you must select [../quant/README.md](../quant/README.md) (`--work-kind quant`).

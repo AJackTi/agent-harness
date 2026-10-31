@@ -1,4 +1,4 @@
-"""Bộ unit test offline cho AJACKTI Agent Harness (Stage A CLI)."""
+"""Offline unit test suite for the AJACKTI Agent Harness (Stage A CLI)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ EXPECTED_CANONICAL_IDS = [
 
 
 def _copy_repo_fixture(dst_root: Path) -> Path:
-    """Sao chép cấu trúc repo sang thư mục tạm để kiểm thử cô lập các trường hợp lỗi."""
+    """Copy the repo structure into a temporary directory to test error cases in isolation."""
     repo_dir = dst_root / "repo"
     shutil.copytree(
         REPO_ROOT,
@@ -61,7 +61,7 @@ def _run_cli(
 
 
 class RealRepositoryTests(unittest.TestCase):
-    """Kiểm thử trực tiếp trên dữ liệu thật của repository ajackti-agent-harness."""
+    """Test directly against the real data of the ajackti-agent-harness repository."""
 
     def test_validate_real_repository_succeeds(self) -> None:
         code, out, err = _run_cli(["validate", "--json"])
@@ -167,7 +167,7 @@ class RealRepositoryTests(unittest.TestCase):
 
 
 class ValidationAndSecurityTests(unittest.TestCase):
-    """Kiểm thử phát hiện lỗi cấu hình, JSON hỏng, trùng khóa, kế thừa vòng, symlink và liên kết hỏng."""
+    """Test detection of config errors, malformed JSON, duplicate keys, inheritance cycles, symlinks, and broken links."""
 
     def test_rejects_malformed_json_and_duplicate_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -177,7 +177,7 @@ class ValidationAndSecurityTests(unittest.TestCase):
             )
             code, _, err = _run_cli(["validate"], repo_root=repo)
             self.assertNotEqual(code, 0)
-            self.assertIn("JSON không hợp lệ", err)
+            self.assertIn("invalid JSON", err)
             self.assertNotIn("Traceback", err)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -188,7 +188,7 @@ class ValidationAndSecurityTests(unittest.TestCase):
             )
             code, _, err = _run_cli(["validate"], repo_root=repo)
             self.assertNotEqual(code, 0)
-            self.assertIn("trùng lặp", err)
+            self.assertIn("duplicate", err)
             self.assertNotIn("Traceback", err)
 
     def test_rejects_bad_schema_version_and_bad_types(self) -> None:
@@ -241,7 +241,7 @@ class ValidationAndSecurityTests(unittest.TestCase):
             reg_path.write_text(json.dumps(reg), encoding="utf-8")
             code, _, err = _run_cli(["validate"], repo_root=repo)
             self.assertNotEqual(code, 0)
-            self.assertIn("trùng lặp", err)
+            self.assertIn("duplicate", err)
 
     def test_rejects_inconsistent_routing_and_candidate_check_flags(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -507,7 +507,7 @@ class ValidationAndSecurityTests(unittest.TestCase):
 
 
 class DoctorAndCliErrorTests(unittest.TestCase):
-    """Kiểm thử lệnh doctor (chỉ qua PATH/filesystem), lệnh lạ, profile lạ và lệnh run tạm hoãn."""
+    """Test the doctor command (PATH/filesystem only), unknown commands, unknown profiles, and the deferred run command."""
 
     def test_doctor_reports_missing_tools_with_zero_exit_and_separate_readiness(
         self,
@@ -626,7 +626,7 @@ class DoctorAndCliErrorTests(unittest.TestCase):
     ) -> None:
         code_unk, _, err_unk = _run_cli(["unknown-subcommand"])
         self.assertNotEqual(code_unk, 0)
-        self.assertIn("LỖI", err_unk)
+        self.assertIn("ERROR", err_unk)
         self.assertNotIn("Traceback", err_unk)
 
         code_prof, _, err_prof = _run_cli(["show", "nonexistent-profile"])

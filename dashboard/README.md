@@ -1,16 +1,16 @@
 # Dashboard Domain Profile (`dashboard`)
 
-Hồ sơ điều phối cho bảng điều khiển quản trị và phân tích dữ liệu ([profile.json](profile.json)), kế thừa trực tiếp từ [../frontend/README.md](../frontend/README.md) (`"extends": ["frontend"]`) và chính sách lõi tại [../core/policy.json](../core/policy.json).
+Orchestration profile for administrative and analytics dashboards ([profile.json](profile.json)), inheriting directly from [../frontend/README.md](../frontend/README.md) (`"extends": ["frontend"]`) and the core policy in [../core/policy.json](../core/policy.json).
 
-## Mở rộng Trọng tâm từ `frontend`
+## Key Extensions from `frontend`
 
-Ngoài các yêu cầu nền tảng của `frontend` (độc lập framework/package manager, hỗ trợ browser automation), `dashboard` bắt buộc kiểm tra thêm 4 khía cạnh:
+Beyond the baseline `frontend` requirements (framework/package-manager independence and browser automation support), `dashboard` mandates verification across four additional areas:
 
-1. **Tính toàn vẹn Dữ liệu Bảng/Biểu đồ (`data`)**: Xử lý tập dữ liệu rỗng, phân trang (pagination), tổng hợp số liệu nhất quán giữa bảng và biểu đồ.
-2. **Đồng bộ Bộ lọc (`filter`)**: Giữ nguyên trạng thái bộ lọc qua URL query/state, tránh race condition khi người dùng đổi bộ lọc liên tục.
-3. **Chuẩn hóa Múi giờ (`timezone`)**: Hiển thị và truy vấn mốc thời gian nhất quán giữa `UTC` và múi giờ địa phương, đặc biệt tại ranh giới ngày/phiên.
-4. **Kiểm soát Truy cập theo Vai trò (`RBAC`)**: Không chỉ ẩn nút bấm trên UI mà phải kiểm chứng trạng thái quyền hạn và không làm rò rỉ dữ liệu nhạy cảm.
+1. **Table and Chart Data Integrity (`data`)**: Handle empty datasets, pagination, and consistent metric aggregation between tables and charts.
+2. **Filter Synchronization (`filter`)**: Preserve filter state across URL query parameters and application state, avoiding race conditions when users rapidly change filters.
+3. **Timezone Normalization (`timezone`)**: Display and query timestamps consistently between `UTC` and local timezones, especially across day and session boundaries.
+4. **Role-Based Access Control (`RBAC`)**: Verify permission state and prevent sensitive data leakage rather than merely hiding UI buttons.
 
-## Quy tắc Bắt buộc Leo thang sang `quant`
+## Mandatory Escalation Rule to `quant`
 
-> **QUAN TRỌNG**: Mọi tác vụ `dashboard` có liên quan tới tính toán, tổng hợp, hoặc đối chiếu **PnL, funding, liquidation, margin, hoặc risk** bắt buộc phải chọn tường minh profile [../quant/README.md](../quant/README.md) (`--profile quant`) và chạy với `--work-kind quant`. Profile `dashboard` chỉ cung cấp ngữ cảnh giao diện, tuyệt đối không được dùng để chạy ngầm tác vụ định lượng dưới `--work-kind task`.
+> **IMPORTANT**: Any `dashboard` task involving calculating, aggregating, or reconciling **PnL, funding, liquidation, margin, or risk** must explicitly select the [../quant/README.md](../quant/README.md) profile (`--profile quant`) and run with `--work-kind quant`. The `dashboard` profile provides UI context only and must never be used to implicitly run quantitative tasks under `--work-kind task`.

@@ -1,35 +1,35 @@
 # AGENTS.md — Consumer Repository Template (UNRESOLVED TEMPLATE)
 
-> **TRẠNG THÁI**: `UNRESOLVED` — Biểu mẫu này chứa các trường `<UNRESOLVED:...>` chưa được cấu hình cho repository đích. Không được coi là sẵn sàng chạy cho tới khi chủ sở hữu repository thay thế toàn bộ `<UNRESOLVED:...>` và xác nhận lệnh kiểm tra thực tế.
+> **STATUS**: `UNRESOLVED` — This template contains `<UNRESOLVED:...>` fields that have not been configured for the target repository. Do not treat it as ready for execution until the repository owner replaces all `<UNRESOLVED:...>` markers and confirms the actual verification commands.
 
-## 1. Thông tin Repository Tiêu thụ (Consumer Context)
+## 1. Consumer Repository Context
 
 - **Repository Name**: `<UNRESOLVED:CONSUMER_REPO_NAME>`
 - **Workspace Root**: `<UNRESOLVED:ABSOLUTE_WORKSPACE_PATH>`
 - **Selected Profiles**: `<UNRESOLVED:PROFILE_IDS_EG_backend/typescript,frontend>`
 - **Work Kind (`task` | `quant`)**: `<UNRESOLVED:WORK_KIND>`
-- **Repo Context File**: Tham chiếu [../templates/repo-context.json](../templates/repo-context.json)
+- **Repo Context File**: Reference [../templates/repo-context.json](../templates/repo-context.json)
 
-## 2. Chính sách Điều phối Kế thừa từ AJACKTI Core
+## 2. Orchestration Policy Inherited from AJACKTI Core
 
-Repository này tuân thủ chính sách lõi tại [policy.json](policy.json) và [../AGENTS.md](../AGENTS.md):
+This repository adheres to the core policy in [policy.json](policy.json) and [../AGENTS.md](../AGENTS.md):
 
-1. **External-First (`agy`)**: Mọi thay đổi code/test/docs/config được thực thi trước tiên bởi `agy` (`gemini-4-argon-high --effort high`, chế độ `request-review`, cờ `--no-resume-worker`). ChatGPT chỉ điều phối và duyệt cuối.
-2. **Phân luồng Runner**:
+1. **External-First (`agy`)**: All code/test/docs/config changes must be executed first by `agy` (`gemini-4-argon-high --effort high`, `request-review` mode, `--no-resume-worker` flag). ChatGPT strictly coordinates and performs final review.
+2. **Runner Routing**:
    - `task` -> `antigravity-task-runner` (`--min-reviewers 1 --max-reworks 2`)
-   - `quant` -> `antigravity-sol-quant-runner` (hiện đang `BLOCKED` cho tới khi có stronger reviewer được xác thực; tuyệt đối không chạy tác vụ PnL/funding/liquidation/risk dưới `task`).
-3. **Pipeline**: `agy worker` -> kiểm tra cơ học tại repo -> `jev-1.13.0` (`jev-pool`, chỉ triage bằng chứng, không sửa file) -> fresh pinned reviewer -> ChatGPT final review.
+   - `quant` -> `antigravity-sol-quant-runner` (currently `BLOCKED` until a stronger reviewer is validated; never run PnL/funding/liquidation/risk tasks under `task`).
+3. **Pipeline**: `agy worker` -> repo-native mechanical checks -> `jev-1.13.0` (`jev-pool`, evidence triage only, no file edits) -> fresh pinned reviewer -> ChatGPT final review.
 
-## 3. Lệnh Kiểm tra Do Repository Sở hữu (Consumer-Accepted Verification)
+## 3. Consumer-Accepted Verification Commands
 
-Các gợi ý trong `profile.json` chỉ là ví dụ chưa kiểm chứng (`example_unverified`). Chủ sở hữu repository phải khai báo các lệnh thực tế tại đây trước khi chạy:
+Candidate checks in `profile.json` are unverified examples only (`example_unverified`). The repository owner must declare the actual commands here before execution:
 
 - **Lint / Static Check**: `<UNRESOLVED:ACCEPTED_LINT_COMMAND>`
 - **Typecheck / Build**: `<UNRESOLVED:ACCEPTED_BUILD_COMMAND>`
 - **Unit / Integration Tests**: `<UNRESOLVED:ACCEPTED_TEST_COMMAND>`
 
-## 4. Phạm vi & Ranh giới Bảo vệ (Scope & Protected Paths)
+## 4. Scope & Protected Paths
 
 - **Allowed Scope**: `<UNRESOLVED:EXPLICIT_RELATIVE_SCOPE_FILES>`
 - **Forbidden Paths**: `.git/`, `.env*`, `secrets/`, `credentials/`, live configs, endpoints, leverage/margin parameters.
-- **Output Artifacts Directory**: `<UNRESOLVED:OUTPUT_DIR_OUTSIDE_WORKSPACE>` (bắt buộc nằm ngoài `Workspace Root`).
+- **Output Artifacts Directory**: `<UNRESOLVED:OUTPUT_DIR_OUTSIDE_WORKSPACE>` (must reside outside `Workspace Root`).

@@ -7,7 +7,7 @@
   ],
   "name": "Quantitative Engineering & Risk Profile",
   "domain": "quant",
-  "description": "Hồ sơ điều phối cho toán tài chính, PnL, funding, liquidation, backtest và risk; hiện BLOCKED khi chạy thực tế cho tới khi chứng minh được stronger reviewer.",
+  "description": "Orchestration profile for financial math, PnL, funding, liquidation, backtesting, and risk; currently BLOCKED for live execution until a stronger reviewer is proven.",
   "extends": [],
   "work_kind": "quant",
   "runner_route": {
@@ -16,20 +16,20 @@
     "min_reviewers": 2,
     "max_reworks": 2,
     "execution_status": "blocked_requires_stronger_reviewer",
-    "unblock_requirement": "Cung cấp và xác thực cơ học một reviewer model/tier mạnh hơn gemini-4-argon-high trong antigravity-sol-quant-runner và được người dùng phê duyệt mở khóa trong core/policy.json."
+    "unblock_requirement": "Provide and mechanically verify a reviewer model/tier stronger than gemini-4-argon-high in antigravity-sol-quant-runner, with explicit user approval to unblock in core/policy.json."
   },
   "tools": [
     {
       "name": "python3",
       "binary": "python3",
       "required": true,
-      "description": "Runtime kiểm chứng tập dữ liệu định lượng tái lập (reproducible quant datasets) và bộ kiểm thử tất định."
+      "description": "Runtime for verifying reproducible quant datasets and deterministic test suites."
     },
     {
       "name": "git",
       "binary": "git",
       "required": true,
-      "description": "Kiểm chứng nguồn gốc thay đổi, phạm vi file (scope) và git diff --check."
+      "description": "Verify change provenance, file scope, and git diff --check."
     }
   ],
   "candidate_checks": [
@@ -38,28 +38,28 @@
       "command_example": "python3 -B -m unittest discover -s tests -v",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy bộ kiểm thử tất định với seed cố định và tập dữ liệu tái lập tại repository tiêu thụ."
+      "description": "Run deterministic test suites with fixed seeds and reproducible datasets in the consumer repository."
     },
     {
       "id": "quant-dataset-reproducibility",
       "command_example": "python3 scripts/verify_dataset_hashes.py",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm tra tính toàn vẹn và nguồn gốc nhân quả (causal provenance) của tập dữ liệu định lượng."
+      "description": "Verify the integrity and causal provenance of quantitative datasets."
     }
   ],
   "expected_evidence": [
-    "Bằng chứng 5 bất biến định lượng: causal provenance, realistic friction, LONG/SHORT parity, deterministic seeds/tests, và stronger reviewer",
-    "Mã thoát thực tế (exit code) của các lệnh kiểm thử tất định và kiểm tra tập dữ liệu tái lập",
-    "Báo cáo phân loại bằng chứng kiểu hóa từ Jev (jev-1.13.0) và đánh giá từ tối thiểu 2 reviewers (bao gồm stronger reviewer)"
+    "Evidence of the 5 quantitative invariants: causal provenance, realistic friction, LONG/SHORT parity, deterministic seeds/tests, and stronger reviewer",
+    "Actual exit codes of the deterministic test and reproducible dataset verification commands",
+    "Typed evidence triage report from Jev (jev-1.13.0) and evaluations from at least 2 reviewers (including a stronger reviewer)"
   ],
   "special_risks": [
-    "Lookahead bias (rò rỉ dữ liệu tương lai vào quyết định tại thời điểm hiện tại)",
-    "Bỏ qua phí giao dịch, trượt giá (slippage) hoặc funding rate làm sai lệch PnL",
-    "Bất đối xứng công thức giữa vị thế LONG và SHORT hoặc sai lệch ngưỡng thanh lý (liquidation)",
-    "Chạy ngầm tác vụ quant dưới profile tổng quát (--work-kind task) hoặc coi hai reviewer cùng model là stronger reviewer"
+    "Lookahead bias (leaking future data into decisions at the current timestamp)",
+    "Omitting trading fees, slippage, or funding rates, thereby distorting PnL",
+    "Formula asymmetry between LONG and SHORT positions or inaccurate liquidation thresholds",
+    "Implicitly running quant tasks under a general profile (--work-kind task) or treating two same-model reviewers as a stronger reviewer"
   ],
   "quant_escalation_required_when": [
-    "Mọi tác vụ PnL, funding, liquidation, backtest, margin, leverage và risk bắt buộc dùng trực tiếp profile quant và --work-kind quant"
+    "All tasks involving PnL, funding, liquidation, backtesting, margin, leverage, or risk must directly use the quant profile and --work-kind quant"
   ]
 }

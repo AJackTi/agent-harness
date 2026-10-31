@@ -24,6 +24,6 @@
   "quant_seam_declaration": {
     "involves_pnl_funding_liquidation_or_risk": "<UNRESOLVED:BOOLEAN_REQUIRED>",
     "requires_explicit_quant_profile": true,
-    "notes": "Nếu tác vụ trên dashboard hoặc data chạm vào PnL, funding, liquidation, margin hoặc risk thì bắt buộc khai báo work_kind=quant và chọn profile quant."
+    "notes": "If a dashboard or data task touches PnL, funding, liquidation, margin, or risk, it must declare work_kind=quant and select the quant profile."
   }
 }

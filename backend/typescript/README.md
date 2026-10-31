@@ -1,15 +1,15 @@
 # Backend TypeScript Profile (`backend/typescript`)
 
-Hồ sơ điều phối cho các dịch vụ backend viết bằng TypeScript / Node.js ([profile.json](profile.json)), kế thừa chính sách lõi tại [../../core/policy.json](../../core/policy.json).
+Orchestration profile for TypeScript / Node.js backend services ([profile.json](profile.json)), inheriting the core policy from [../../core/policy.json](../../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `node`, `tsc` (trình quản lý gói `npm`/`pnpm`/`yarn`/`bun` tùy thuộc vào lockfile của repository tiêu thụ).
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
-  - `npx tsc --noEmit` (kiểm tra kiểu tĩnh)
-  - `npm test` (chạy unit/integration test của repo)
-  - `npm run lint` (kiểm tra quy chuẩn mã nguồn)
-- **Bằng chứng kỳ vọng**: mã thoát thực tế (`exit code 0`) cho bước typecheck, test, lint và `git diff --check`.
-- **Rủi ro đặc thù**: ép kiểu `any` làm mất an toàn kiểu, rò rỉ bất đồng bộ (unhandled promise rejections), thay đổi ngầm schema API hoặc biến môi trường. Nếu xử lý PnL/funding/liquidation/risk, bắt buộc chuyển sang [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
+- **Primary tools**: `node`, `tsc` (package manager `npm`/`pnpm`/`yarn`/`bun` depending on the consumer repository lockfile).
+- **Suggested verification commands (`example_unverified`)**:
+  - `npx tsc --noEmit` (static type checking)
+  - `npm test` (run repository unit/integration tests)
+  - `npm run lint` (check source code linting rules)
+- **Expected evidence**: actual exit codes (`exit code 0`) for typecheck, test, lint, and `git diff --check`.
+- **Domain-specific risks**: `any` type assertions that bypass type safety, unhandled asynchronous promise rejections, and implicit changes to API schemas or environment variables. If the work involves PnL/funding/liquidation/risk, it must escalate to [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
 
-Xem thêm danh mục backend tại [../README.md](../README.md).
+See the backend domain index at [../README.md](../README.md).

@@ -1,42 +1,42 @@
-# Kiến trúc AJACKTI Agent Harness (`docs/ARCHITECTURE.md`)
+# AJACKTI Agent Harness Architecture (`docs/ARCHITECTURE.md`)
 
-`ajackti-agent-harness` được thiết kế theo các nguyên lý: điểm vào `AGENTS.md` gọn nhẹ, repository là nguồn thẩm quyền duy nhất, khám phá ngữ cảnh tiệm tiến (progressive context discovery), hoàn thành dựa trên bằng chứng (evidence-based completion), và kiểm chứng gốc tại repo tiêu thụ (repo-native validation).
+`ajackti-agent-harness` is designed around five principles: a lightweight `AGENTS.md` entrypoint, the repository as the single source of authority, progressive context discovery, evidence-based completion, and repo-native validation in the consumer repository.
 
-## 1. Mô hình Tổ hợp 3 Tầng (Three-Layer Composition)
+## 1. Three-Layer Composition
 
-1. **Tầng Lõi (`core/`)**:
-   - Định nghĩa tại [../core/policy.json](../core/policy.json) và [../AGENTS.md](../AGENTS.md).
-   - Ghim cố định chính sách `external-first` với `agy`, model `gemini-4-argon-high --effort high` ở chế độ `request-review` cho cả worker và fresh reviewer, phân loại bằng chứng với `jev-1.13.0` (`jev-pool`), và giới hạn tối đa `2` vòng làm lại (`--max-reworks 2`).
-   - Bắt buộc truyền cờ `--no-resume-worker` cho workflow gốc (`antigravity-task-runner/scripts/run_workflow.py`) — lưu ý đây là cờ của workflow gốc, **không phải** cờ trực tiếp của CLI `agy` hay của phiên reviewer. Ngữ cảnh mới trên cùng model (`gemini-4-argon-high`) chỉ mang tính **độc lập (`independent`)**, **không mạnh hơn (`not stronger`)** (`independent_not_stronger`).
-2. **Tầng Hồ sơ Miền (`<domain>/profile.json`)**:
-   - Đăng ký tường minh trong [../harness.json](../harness.json).
-   - Bao gồm 10 profile: `backend/typescript`, `backend/golang`, `backend/rust`, `frontend`, `dashboard`, `ios`, `android`, `quant`, `devops`, `data` (hỗ trợ cả ID chính tắc lẫn alias khi tra cứu và chạy CLI).
-   - Hỗ trợ kế thừa khái niệm qua trường `extends`: cụ thể `dashboard` mở rộng `frontend` (`"extends": ["frontend"]`), bổ sung các yêu cầu kiểm tra dữ liệu bảng biểu, bộ lọc (filter state), múi giờ (timezone), và phân quyền (`RBAC`).
-   - **Số lượng reviewer tối thiểu hiệu lực (`min_reviewers`)**: đối với `task`, số lượng reviewer tối thiểu được tính bằng **giá trị lớn nhất (`max`)** giữa chính sách lõi (`core/policy.json`) và toàn bộ các profile đã chọn cùng chuỗi kế thừa (`extends` / `lineage`). Mặc định hiện tại là `1`; cổng review cài đặt (`jev_review_gate.py`) hỗ trợ năng lực trong khoảng `1..4`, và bất kỳ cấu hình nào yêu cầu vượt ngoài `1..4` đều bị chặn `BLOCKED`.
-   - **Lưu ý quan trọng**: Một profile chỉ là hướng dẫn và yêu cầu năng lực (capability requirements), **không phải bằng chứng** rằng các lệnh ví dụ sẽ chạy được trong một ứng dụng bất kỳ. Mọi lệnh gợi ý trong `candidate_checks` đều mang nhãn `"status": "example_unverified"` và `"requires_consumer_acceptance": true`, không bao giờ được tự động tiêm hay thực thi trong `run`.
-3. **Tầng Ngữ cảnh Repository Tiêu thụ (`repo-context.json` & `task.md`)**:
-   - Khởi tạo từ [../templates/repo-context.json](../templates/repo-context.json) và [../templates/task.md](../templates/task.md).
-   - **`repo-context.json` chỉ mang tính tham khảo (`advisory_only`)**: file này không được `harness.py run` đọc làm quyền phê duyệt thực thi (`execution_authorization: false`) hay làm nguồn lấy lệnh chạy. Lệnh `run` chỉ chấp nhận và chịu sự chi phối tường minh từ các đối số dòng lệnh CLI (`--workspace`, `--packet`, `--scope`, `--verify-cmd`, `--output-dir`, `--profile`, `--work-kind`, ...).
-   - **Hợp đồng Packet & Giới hạn Kích thước**: file `--packet` phải là UTF-8 `<= 8000` ký tự, không còn `<UNRESOLVED:...>` hay placeholder, và có các dòng tiêu đề duy nhất không thụt lề đầu dòng: `TASK:`, `WORK_KIND: task`, `QUANT_SEAM: false`. Tách biệt với ngưỡng `8000` ký tự của user packet, cổng review cài đặt giới hạn **focused diff ở mức `12000` ký tự** và **internal review packet ở mức `20000` ký tự**; do đó cần chia nhỏ tác vụ theo `--scope` hẹp thay vì làm yếu cổng kiểm tra hoặc nén mã nguồn.
+1. **Core Layer (`core/`)**:
+   - Defined in [../core/policy.json](../core/policy.json) and [../AGENTS.md](../AGENTS.md).
+   - Pins the `external-first` policy with `agy`, the `gemini-4-argon-high --effort high` model in `request-review` mode for both workers and fresh reviewers, evidence triage with `jev-1.13.0` (`jev-pool`), and a maximum of `2` rework rounds (`--max-reworks 2`).
+   - Requires passing `--no-resume-worker` to the underlying workflow (`antigravity-task-runner/scripts/run_workflow.py`) — note that this is an underlying workflow flag, **not** a direct `agy` CLI flag or a reviewer-session flag. A fresh context on the same model (`gemini-4-argon-high`) is **independent**, **not stronger** (`independent_not_stronger`).
+2. **Domain Profile Layer (`<domain>/profile.json`)**:
+   - Explicitly registered in [../harness.json](../harness.json).
+   - Includes 10 profiles: `backend/typescript`, `backend/golang`, `backend/rust`, `frontend`, `dashboard`, `ios`, `android`, `quant`, `devops`, `data` (supporting both canonical IDs and aliases for lookup and CLI execution).
+   - Supports conceptual inheritance via `extends`: specifically, `dashboard` extends `frontend` (`"extends": ["frontend"]`), adding verification requirements for tabular data, filter state, timezone handling, and role-based access control (`RBAC`).
+   - **Effective minimum reviewers (`min_reviewers`)**: for `task`, the minimum reviewer count is computed as the **maximum (`max`)** across the core policy (`core/policy.json`) and all selected profiles plus their inheritance chain (`extends` / `lineage`). The current default is `1`; the installed review gate (`jev_review_gate.py`) supports a range of `1..4`, and any configuration requesting outside `1..4` is `BLOCKED`.
+   - **Important note**: A profile provides guidance and capability requirements only, **not proof** that example commands will work in an arbitrary application. Every suggested command in `candidate_checks` carries `"status": "example_unverified"` and `"requires_consumer_acceptance": true`, and is never automatically injected or executed during `run`.
+3. **Consumer Repository Context Layer (`repo-context.json` & `task.md`)**:
+   - Initialized from [../templates/repo-context.json](../templates/repo-context.json) and [../templates/task.md](../templates/task.md).
+   - **`repo-context.json` is advisory only (`advisory_only`)**: `harness.py run` does not read this file as execution authorization (`execution_authorization: false`) or as a source of commands to run. The `run` command accepts and is governed exclusively by explicit CLI arguments (`--workspace`, `--packet`, `--scope`, `--verify-cmd`, `--output-dir`, `--profile`, `--work-kind`, ...).
+   - **Packet Contract & Size Limits**: the `--packet` file must be UTF-8 `<= 8000` characters, free of `<UNRESOLVED:...>` or other placeholders, and contain unique unindented header lines: `TASK:`, `WORK_KIND: task`, `QUANT_SEAM: false`. Separate from the `8000`-character user packet threshold, the installed review gate caps the **focused diff at `12000` characters** and the **internal review packet at `20000` characters**; tasks should therefore be decomposed with a narrow `--scope` rather than weakening gates or compressing source code.
 
-## 2. Phân tách Seam `task` vs `quant`
+## 2. `task` vs `quant` Seam Separation
 
-- **Seam Kỹ thuật Chung (`--work-kind task`)**:
-   - Tuyến tới `antigravity-task-runner` (`scripts/run_workflow.py` trong `~/.agents/skills`).
-   - Áp dụng cho `backend/*`, `frontend`, `dashboard` (thuần giao diện/hiển thị không chứa logic tài chính), `ios`, `android`, `devops`, `data` (thuần ETL/schema không tính toán tài chính).
-- **Seam Định lượng (`--work-kind quant`)**:
-   - Tuyến tới `antigravity-sol-quant-runner`.
-   - Bắt buộc chọn profile `quant` và `--work-kind quant` bất cứ khi nào tác vụ chạm tới công thức PnL, funding rate, thanh lý (liquidation), trượt giá (slippage), đòn bẩy (leverage/margin), backtest, hoặc quản trị rủi ro (risk) — ngay cả khi tác vụ nằm trên giao diện [../dashboard/README.md](../dashboard/README.md) hoặc đường ống [../data/README.md](../data/README.md).
-   - Không một bộ phân loại tự động nào được phép chuyển seam `quant` về `task`. Cơ chế quét từ khóa trên dòng `TASK:` trong [../scripts/run_contract.py](../scripts/run_contract.py) chỉ là bước sàng lọc bảo thủ bổ trợ (supplemental conservative heuristic); **trách nhiệm phân loại ngữ nghĩa seam vẫn thuộc về người điều phối (coordinator)**.
-   - Hiện tại việc thực thi `quant` qua CLI trả về `BLOCKED` (mã thoát khác `0`) vì người dùng yêu cầu một **stronger reviewer** trong khi runner hiện tại chỉ cung cấp các fresh reviewer cùng model `gemini-4-argon-high` (độc lập nhưng không mạnh hơn). Việc mở khóa trong tương lai đòi hỏi triển khai/tích hợp đường thực thi `quant` riêng được phê duyệt cùng bằng chứng và bài kiểm thử stronger reviewer, **không chỉ đơn thuần là bật cờ `execution_enabled`** trong [../core/policy.json](../core/policy.json).
+- **General Engineering Seam (`--work-kind task`)**:
+   - Routes to `antigravity-task-runner` (`scripts/run_workflow.py` under `~/.agents/skills`).
+   - Applies to `backend/*`, `frontend`, `dashboard` (pure UI/presentation with no financial logic), `ios`, `android`, `devops`, and `data` (pure ETL/schema with no financial calculations).
+- **Quantitative Seam (`--work-kind quant`)**:
+   - Routes to `antigravity-sol-quant-runner`.
+   - The `quant` profile and `--work-kind quant` must be selected whenever a task touches PnL formulas, funding rates, liquidation, slippage, leverage/margin, backtests, or risk management — even when the task lives in the [../dashboard/README.md](../dashboard/README.md) UI or the [../data/README.md](../data/README.md) pipeline.
+   - No automatic classifier may move a `quant` seam to `task`. The keyword scan on the `TASK:` line in [../scripts/run_contract.py](../scripts/run_contract.py) is only a supplemental conservative heuristic; **responsibility for semantic seam classification remains with the coordinator**.
+   - Currently, `quant` execution via the CLI returns `BLOCKED` (non-zero exit code) because the user requires a **stronger reviewer**, while the current runner only provides fresh reviewers on the same `gemini-4-argon-high` model (independent but not stronger). Unlocking this in the future requires implementing/integrating a separate, approved `quant` execution path together with stronger-reviewer evidence and tests, **not merely enabling the `execution_enabled` flag** in [../core/policy.json](../core/policy.json).
 
-## 3. Thiết kế Thin Adapter ([../scripts/harness.py](../scripts/harness.py), [../scripts/run_contract.py](../scripts/run_contract.py), [../scripts/run_adapter.py](../scripts/run_adapter.py))
+## 3. Thin Adapter Design ([../scripts/harness.py](../scripts/harness.py), [../scripts/run_contract.py](../scripts/run_contract.py), [../scripts/run_adapter.py](../scripts/run_adapter.py))
 
-- Yêu cầu **Python `>= 3.11`**, được viết hoàn toàn bằng thư viện chuẩn Python (`stdlib`), không phụ thuộc gói ngoài, và được kiểm thử bởi [../tests/test_harness.py](../tests/test_harness.py), [../tests/test_run_contract.py](../tests/test_run_contract.py), và [../tests/test_run_adapter.py](../tests/test_run_adapter.py).
-- Các lệnh offline `list`, `show`, `validate`, và `doctor` đều hỗ trợ cờ `--json` (lệnh `doctor` hỗ trợ thêm `--skills-root PATH` và cờ `--profile PROFILE` lặp lại được; cờ toàn cục `--repo-root PATH` đặt trước tên lệnh phụ).
-- Không sao chép (vendor) hay viết lại logic điều phối/cổng bảo mật của `antigravity-task-runner`, và không tuyên bố rằng các skill trong `~/.agents/skills` được đóng gói sẵn trong repo này.
-- Kiểm tra chặt chẽ hợp đồng đầu vào trước khi gọi runner:
-   - `--scope`: chỉ chấp nhận danh sách từng đường dẫn **file** tương đối riêng lẻ trong `--workspace`; cấm thư mục, đường dẫn tuyệt đối, leo thư mục (`..`), đi qua symlink, hoặc chạm vào `.git`, `.env*`, `secrets/`, `credentials/`, khóa bí mật và các file cấu hình bảo vệ (`harness_protected_files`).
-   - `--output-dir`: bắt buộc là đường dẫn thư mục **mới chưa tồn tại** (không phải symlink), nằm **bên ngoài** `--workspace` của repo tiêu thụ, và có thư mục cha trực tiếp đã tồn tại, có quyền ghi/duyệt (`W_OK | X_OK`).
-   - `--dry-run`: chạy hoàn toàn offline (không tìm kiếm `agy`/`jev-pool` trên `PATH` và không tạo tiến trình con), nhưng **vẫn bắt buộc** có script runner an toàn `antigravity-task-runner/scripts/run_workflow.py` bên dưới `--skills-root` cùng `--workspace`, `--packet`, `--scope`, `--output-dir` hợp lệ; khi chạy thật (không `--dry-run`) sẽ kiểm tra thêm quyền thực thi (`X_OK`) của `agy` và `jev-pool`.
-   - Hiển thị lệnh bằng `shlex.join` và thực thi danh sách `argv` với `shell=False`.
+- Requires **Python `>= 3.11`**, is written entirely with the Python standard library (`stdlib`) with no external package dependencies, and is tested by [../tests/test_harness.py](../tests/test_harness.py), [../tests/test_run_contract.py](../tests/test_run_contract.py), and [../tests/test_run_adapter.py](../tests/test_run_adapter.py).
+- The offline commands `list`, `show`, `validate`, and `doctor` all support the `--json` flag (`doctor` additionally supports `--skills-root PATH` and a repeatable `--profile PROFILE` flag; the global `--repo-root PATH` flag goes before the subcommand name).
+- Does not vendor or rewrite the orchestration/safety-gate logic of `antigravity-task-runner`, and does not claim that the skills in `~/.agents/skills` are bundled in this repository.
+- Strictly validates the input contract before invoking the runner:
+   - `--scope`: accepts only a list of individual relative **file** paths inside `--workspace`; directories, absolute paths, directory traversal (`..`), traversal through symlinks, or touching `.git`, `.env*`, `secrets/`, `credentials/`, secret keys, and protected configuration files (`harness_protected_files`) are forbidden.
+   - `--output-dir`: must be a **new, not-yet-existing** directory path (not a symlink), located **outside** the consumer repository's `--workspace`, whose direct parent directory already exists and is writable/traversable (`W_OK | X_OK`).
+   - `--dry-run`: runs fully offline (does not look up `agy`/`jev-pool` on `PATH` and spawns no subprocesses), but **still requires** the safe runner script `antigravity-task-runner/scripts/run_workflow.py` under `--skills-root` plus valid `--workspace`, `--packet`, `--scope`, and `--output-dir`; a real run (without `--dry-run`) additionally checks execute permission (`X_OK`) for `agy` and `jev-pool`.
+   - Displays commands with `shlex.join` and executes the `argv` list with `shell=False`.

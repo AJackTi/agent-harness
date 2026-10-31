@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "policy_id": "ajackti-core-policy",
-  "description": "Chính sách lõi dùng chung cho toàn bộ domain profiles trong AJACKTI Agent Harness.",
+  "description": "Shared core policy across all domain profiles in the AJACKTI Agent Harness.",
   "execution_model": {
     "mode": "external-first",
     "worker_cli": "agy",
@@ -93,8 +93,8 @@
       "relative_script_path": "antigravity-sol-quant-runner/scripts/run_workflow.py",
       "execution_enabled": false,
       "blocked_status": "BLOCKED",
-      "blocked_reason": "Tác vụ quant yêu cầu stronger reviewer; runner hiện tại chỉ cung cấp các fresh reviewer cùng model gemini-4-argon-high (độc lập nhưng không mạnh hơn).",
-      "unblock_requirement": "Cấu hình và chứng minh được một reviewer model/tier mạnh hơn gemini-4-argon-high trong antigravity-sol-quant-runner, sau đó được người dùng phê duyệt mở khóa tường minh trong core/policy.json."
+      "blocked_reason": "Quant tasks require a stronger reviewer; the current runner only provides fresh reviewers using the same gemini-4-argon-high model (independent, not stronger).",
+      "unblock_requirement": "Configure and prove a reviewer model/tier stronger than gemini-4-argon-high in antigravity-sol-quant-runner, followed by explicit user approval to unblock in core/policy.json."
     }
   },
   "protected_boundaries": {

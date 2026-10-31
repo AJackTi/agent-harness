@@ -7,7 +7,7 @@
   ],
   "name": "Backend TypeScript",
   "domain": "backend",
-  "description": "Hồ sơ điều phối cho dịch vụ backend TypeScript/Node.js với kiểm tra kiểu nghiêm ngặt và kiểm thử tại repo.",
+  "description": "Orchestration profile for TypeScript/Node.js backend services with strict type checking and repository-native testing.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -22,13 +22,13 @@
       "name": "node",
       "binary": "node",
       "required": true,
-      "description": "Node.js runtime cho dịch vụ và công cụ kiểm thử TypeScript."
+      "description": "Node.js runtime for TypeScript services and test tooling."
     },
     {
       "name": "tsc",
       "binary": "tsc",
       "required": false,
-      "description": "Trình biên dịch TypeScript để kiểm tra kiểu tĩnh (có thể gọi qua package runner của repo)."
+      "description": "TypeScript compiler for static type checking (can be invoked via the repository package runner)."
     }
   ],
   "candidate_checks": [
@@ -37,34 +37,34 @@
       "command_example": "npx tsc --noEmit",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm tra kiểu tĩnh TypeScript không sinh file build."
+      "description": "Run TypeScript static type checking without emitting build artifacts."
     },
     {
       "id": "ts-unit-test",
       "command_example": "npm test",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy bộ kiểm thử đơn vị do repository tiêu thụ định nghĩa."
+      "description": "Run the unit test suite defined by the consumer repository."
     },
     {
       "id": "ts-lint",
       "command_example": "npm run lint",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm tra quy chuẩn mã nguồn theo cấu hình linter của dự án."
+      "description": "Check source code conventions using the project linter configuration."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của lệnh typecheck và test đã được chấp thuận",
-    "Kết quả kiểm tra phạm vi file thay đổi (scope) và git diff --check",
-    "Báo cáo phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the accepted typecheck and test commands",
+    "Scope verification of modified files and git diff --check output",
+    "Evidence triage report from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Sử dụng any hoặc ép kiểu không an toàn làm vô hiệu hóa hệ thống kiểu TypeScript",
-    "Rò rỉ promise không được bắt lỗi (unhandled rejections) hoặc nghẽn event loop",
-    "Làm lệch hợp đồng dữ liệu API/DTO hoặc sử dụng số thực dấu phẩy động cho tiền tệ"
+    "Using any or unsafe type assertions that bypass the TypeScript type system",
+    "Unhandled promise rejections or event loop blocking",
+    "Breaking API/DTO data contracts or using floating-point numbers for currency"
   ],
   "quant_escalation_required_when": [
-    "Tính toán PnL, funding rate, thanh lý (liquidation), margin, leverage hoặc rủi ro danh mục"
+    "Computing PnL, funding rates, liquidation, margin, leverage, or portfolio risk"
   ]
 }

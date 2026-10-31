@@ -7,7 +7,7 @@
   ],
   "name": "Android Mobile Application",
   "domain": "mobile",
-  "description": "Hồ sơ điều phối cho ứng dụng Android/Kotlin sử dụng Gradle và Android Emulator.",
+  "description": "Orchestration profile for Android/Kotlin applications using Gradle and Android Emulator.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -22,13 +22,13 @@
       "name": "gradle",
       "binary": "gradle",
       "required": true,
-      "description": "Hệ thống build Gradle (trong repo tiêu thụ thường gọi qua ./gradlew)."
+      "description": "Gradle build system (typically invoked via ./gradlew in the consumer repository)."
     },
     {
       "name": "adb",
       "binary": "adb",
       "required": false,
-      "description": "Android Debug Bridge để giao tiếp với thiết bị ảo (emulator)."
+      "description": "Android Debug Bridge for communicating with the Android Emulator."
     }
   ],
   "candidate_checks": [
@@ -37,34 +37,34 @@
       "command_example": "./gradlew testDebugUnitTest",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy kiểm thử đơn vị Android trên JVM."
+      "description": "Run Android unit tests on the JVM."
     },
     {
       "id": "android-lint",
       "command_example": "./gradlew lintDebug",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Phân tích tĩnh phát hiện lỗi vòng đời, tài nguyên và bảo mật trên Android."
+      "description": "Run static analysis to detect lifecycle, resource, and security issues on Android."
     },
     {
       "id": "android-instrumented-test",
       "command_example": "./gradlew connectedDebugAndroidTest",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy kiểm thử tích hợp trên Android Emulator (nếu repo yêu cầu)."
+      "description": "Run instrumented integration tests on the Android Emulator (when required by the repository)."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của tác vụ Gradle test/lint do repo chấp thuận",
-    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
-    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the Gradle test/lint tasks accepted by the repository",
+    "Scope verification of modified files and git diff --check output",
+    "Evidence triage report from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Rò rỉ Activity/View Context khi xoay màn hình hoặc hủy CoroutineScope sai vòng đời",
-    "Thực hiện I/O hoặc giải mã nặng trên Dispatchers.Main gây ANR",
-    "Thay đổi quyền (permissions), exported components trong AndroidManifest.xml hoặc cấu hình ProGuard/R8"
+    "Activity/View Context leaks during screen rotation or improper CoroutineScope lifecycle cancellation",
+    "Performing blocking I/O or heavy decoding on Dispatchers.Main causing ANRs",
+    "Modifying permissions, exported components in AndroidManifest.xml, or ProGuard/R8 configuration"
   ],
   "quant_escalation_required_when": [
-    "Tính toán hoặc xác thực logic PnL, funding, liquidation, margin hoặc risk ngay trên ứng dụng"
+    "Computing or validating PnL, funding, liquidation, margin, or risk logic directly in the application"
   ]
 }

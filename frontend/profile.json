@@ -7,7 +7,7 @@
   ],
   "name": "Frontend Web Application",
   "domain": "frontend",
-  "description": "Hồ sơ điều phối ứng dụng web độc lập với framework và package manager, hỗ trợ kiểm thử component và browser automation.",
+  "description": "Framework- and package-manager-agnostic web application orchestration profile supporting component testing and browser automation.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -22,13 +22,13 @@
       "name": "node",
       "binary": "node",
       "required": true,
-      "description": "Node.js runtime cho chuỗi công cụ bundler, typecheck và test runner (npm/pnpm/yarn/bun do repo chọn)."
+      "description": "Node.js runtime for bundler, typecheck, and test runner toolchains (npm/pnpm/yarn/bun selected by the repository)."
     },
     {
       "name": "playwright",
       "binary": "playwright",
       "required": false,
-      "description": "Công cụ tự động hóa trình duyệt (browser automation) tùy chọn cho kiểm thử E2E."
+      "description": "Optional browser automation tool for E2E testing."
     }
   ],
   "candidate_checks": [
@@ -37,35 +37,35 @@
       "command_example": "npm run build",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm tra đóng gói hoặc kiểm tra kiểu theo script thực tế trong package.json của repo."
+      "description": "Run build or static type checking using the actual script in the repository's package.json."
     },
     {
       "id": "frontend-unit-test",
       "command_example": "npm test",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy kiểm thử đơn vị/component theo test runner của dự án."
+      "description": "Run unit/component tests using the project's test runner."
     },
     {
       "id": "frontend-browser-e2e",
       "command_example": "npx playwright test",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm thử tương tác giao diện qua browser automation (nếu dự án cấu hình)."
+      "description": "Run UI interaction tests via browser automation (if configured by the project)."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của lệnh build/typecheck và test do repo chấp thuận",
-    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
-    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the build/typecheck and test commands accepted by the repository",
+    "Scope verification of modified files and git diff --check output",
+    "Evidence triage report from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Phụ thuộc ngầm vào một package manager hoặc framework không khớp với lockfile của repo",
-    "Lỗi bất đồng bộ trạng thái UI (stale closures, race condition khi fetch dữ liệu)",
-    "Lộ thông tin nhạy cảm hoặc endpoint nội bộ trong bundle phía client",
-    "Lỗi khả năng tiếp cận (accessibility) và tương thích kích thước màn hình"
+    "Implicit reliance on a package manager or framework that does not match the repository lockfile",
+    "Asynchronous UI state bugs (stale closures, data-fetching race conditions)",
+    "Exposing sensitive credentials or internal endpoints in the client-side bundle",
+    "Accessibility regressions and viewport/responsive layout issues"
   ],
   "quant_escalation_required_when": [
-    "Hiển thị hoặc tính toán công thức PnL, funding rate, thanh lý (liquidation), margin hoặc chỉ số rủi ro"
+    "Displaying or computing PnL formulas, funding rates, liquidation, margin, or risk metrics"
   ]
 }

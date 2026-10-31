@@ -8,7 +8,7 @@
   ],
   "name": "Data Engineering & Data Quality",
   "domain": "data",
-  "description": "Hồ sơ điều phối cho đường ống ETL/ELT, schema migration và kiểm định chất lượng dữ liệu (data quality).",
+  "description": "Orchestration profile for ETL/ELT pipelines, schema migrations, and data quality verification.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -23,19 +23,19 @@
       "name": "python3",
       "binary": "python3",
       "required": true,
-      "description": "Runtime thực thi các bài kiểm tra chất lượng dữ liệu (data quality) và biến đổi schema."
+      "description": "Runtime for executing data quality checks and schema transformations."
     },
     {
       "name": "sqlite3",
       "binary": "sqlite3",
       "required": false,
-      "description": "Công cụ kiểm thử truy vấn SQL cục bộ và xác thực ràng buộc bảng."
+      "description": "Tool for local SQL query testing and table constraint validation."
     },
     {
       "name": "dbt",
       "binary": "dbt",
       "required": false,
-      "description": "Công cụ mô hình hóa và kiểm định chất lượng dữ liệu tùy chọn (nếu repo tiêu thụ sử dụng)."
+      "description": "Optional data modeling and data quality verification tool (if used by the consumer repository)."
     }
   ],
   "candidate_checks": [
@@ -44,27 +44,27 @@
       "command_example": "python3 -m unittest discover -s tests/data_quality -v",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Kiểm tra ràng buộc khóa chính, tỷ lệ NULL, kiểu dữ liệu và tính toàn vẹn tham chiếu."
+      "description": "Verify primary key constraints, NULL ratios, data types, and referential integrity."
     },
     {
       "id": "data-idempotency-check",
       "command_example": "python3 scripts/verify_pipeline_idempotency.py",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Đảm bảo chạy lại cùng một phân vùng dữ liệu không sinh bản ghi trùng lặp."
+      "description": "Ensure re-running on the same data partition does not produce duplicate records."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của các bài kiểm tra data quality và schema do repo chấp thuận",
-    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
-    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the repository-accepted data quality and schema checks",
+    "Valid file scope evidence and git diff --check verification",
+    "Evidence classification results from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Thay đổi schema phá vỡ tương thích ngược (breaking schema drift) đối với các bảng hạ nguồn",
-    "Nhân bản bản ghi khi backfill hoặc lệch múi giờ tại ranh giới phân vùng ngày (UTC vs local)",
-    "Tính toán ngầm chỉ số tài chính (PnL/funding/risk) trong đường ống ETL mà không kích hoạt profile quant"
+    "Breaking schema drift affecting downstream tables",
+    "Record duplication during backfills or timezone mismatches at date partition boundaries (UTC vs local)",
+    "Implicit calculation of financial metrics (PnL/funding/risk) in ETL pipelines without activating the quant profile"
   ],
   "quant_escalation_required_when": [
-    "Bất kỳ tác vụ data nào tính toán hoặc biến đổi PnL, funding, liquidation, margin, leverage hoặc chỉ số rủi ro đều bắt buộc chọn tường minh profile quant và --work-kind quant"
+    "Any data task that computes or transforms PnL, funding, liquidation, margin, leverage, or risk metrics must explicitly select the quant profile and --work-kind quant"
   ]
 }

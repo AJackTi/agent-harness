@@ -1,15 +1,15 @@
 # Backend Golang Profile (`backend/golang`)
 
-Hồ sơ điều phối cho dịch vụ backend viết bằng Go ([profile.json](profile.json)), kế thừa chính sách lõi tại [../../core/policy.json](../../core/policy.json).
+Orchestration profile for Go backend services ([profile.json](profile.json)), inheriting the core policy from [../../core/policy.json](../../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `go`, `golangci-lint` (tùy chọn theo cấu hình dự án).
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
-  - `go test ./...` (chạy kiểm thử toàn bộ package)
-  - `go vet ./...` (phân tích tĩnh phát hiện lỗi phổ biến trong Go)
-  - `go test -race ./...` (phát hiện tranh chấp dữ liệu đồng thời)
-- **Bằng chứng kỳ vọng**: mã thoát thực tế của `go test`/`go vet` được repo chấp thuận, cùng kiểm tra `scope` và `git diff --check`.
-- **Rủi ro đặc thù**: rò rỉ goroutine (goroutine leak), data race khi truy cập map/struct dùng chung, bỏ qua `context.Context` cancellation hoặc nuốt lỗi trả về (`err`). Nếu xử lý PnL/funding/liquidation/risk, bắt buộc chọn thêm [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
+- **Primary tools**: `go`, `golangci-lint` (optional depending on the project configuration).
+- **Suggested verification commands (`example_unverified`)**:
+  - `go test ./...` (run tests across all packages)
+  - `go vet ./...` (static analysis for common Go defects)
+  - `go test -race ./...` (detect concurrent data races)
+- **Expected evidence**: actual exit codes of the repository-accepted `go test`/`go vet` commands, along with `scope` verification and `git diff --check`.
+- **Domain-specific risks**: goroutine leaks, data races when accessing shared maps/structs, ignoring `context.Context` cancellation, or swallowing returned errors (`err`). If the work involves PnL/funding/liquidation/risk, it must escalate to [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
 
-Xem thêm danh mục backend tại [../README.md](../README.md).
+See the backend domain index at [../README.md](../README.md).

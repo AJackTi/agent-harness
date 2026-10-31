@@ -1,15 +1,15 @@
 # Data Engineering & Quality Profile (`data`)
 
-Hồ sơ điều phối cho đường ống dữ liệu (ETL/ELT), schema migration, và kiểm định chất lượng dữ liệu ([profile.json](profile.json)), kế thừa chính sách lõi tại [../core/policy.json](../core/policy.json).
+Orchestration profile for data pipelines (ETL/ELT), schema migrations, and data quality verification ([profile.json](profile.json)), inheriting the core policy from [../core/policy.json](../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `python3`, `sqlite3` (cùng các công cụ truy vấn/data quality như `duckdb` hoặc `dbt` tùy theo repository tiêu thụ).
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
-  - Kiểm tra chất lượng dữ liệu (data quality checks: tính duy nhất của khóa chính, tỷ lệ `NULL`, tính tươi mới — freshness, và tương thích ngược của schema).
-  - Kiểm tra tính lũy đẳng (idempotency) của bước nạp/biến đổi dữ liệu khi chạy lại trên cùng một phân vùng thời gian.
-- **Bằng chứng kỳ vọng**: mã thoát thực tế của bài kiểm thử chất lượng dữ liệu và schema do repo chấp thuận, kèm kiểm tra `scope` và `git diff --check`.
+- **Primary tools**: `python3`, `sqlite3` (along with query/data quality tools such as `duckdb` or `dbt` depending on the consumer repository).
+- **Suggested verification commands (`example_unverified`)**:
+  - Data quality checks (primary key uniqueness, `NULL` ratios, freshness, and schema backward compatibility).
+  - Idempotency checks for data ingestion and transformation steps when re-running on the same time partition.
+- **Expected evidence**: actual exit codes of the repository-accepted data quality and schema tests, along with `scope` verification and `git diff --check`.
 
-## Quy tắc Bắt buộc Leo thang sang `quant`
+## Mandatory Escalation Rule to `quant`
 
-> **QUAN TRỌNG**: Bất kỳ tác vụ `data` nào có tính toán, biến đổi, hoặc tổng hợp dữ liệu liên quan tới **PnL, funding, liquidation, margin, leverage, hoặc risk** đều **bắt buộc** phải chọn tường minh profile [../quant/README.md](../quant/README.md) (`--profile quant`) và chạy với `--work-kind quant`. Profile `data` chỉ đóng vai trò bổ sung ngữ cảnh hạ tầng dữ liệu/schema, tuyệt đối không được dùng để chạy tác vụ định lượng dưới `--work-kind task`.
+> **IMPORTANT**: Any `data` task that computes, transforms, or aggregates data related to **PnL, funding, liquidation, margin, leverage, or risk** must **explicitly** select the [../quant/README.md](../quant/README.md) profile (`--profile quant`) and run with `--work-kind quant`. The `data` profile only provides supplementary data infrastructure and schema context and must never be used to run quantitative tasks under `--work-kind task`.

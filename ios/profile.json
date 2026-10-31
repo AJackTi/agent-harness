@@ -7,7 +7,7 @@
   ],
   "name": "iOS Mobile Application",
   "domain": "mobile",
-  "description": "Hồ sơ điều phối cho ứng dụng iOS/Swift sử dụng Xcode và iOS Simulator.",
+  "description": "Orchestration profile for iOS/Swift applications using Xcode and iOS Simulator.",
   "extends": [],
   "work_kind": "task",
   "runner_route": {
@@ -22,19 +22,19 @@
       "name": "xcodebuild",
       "binary": "xcodebuild",
       "required": true,
-      "description": "Công cụ dòng lệnh Xcode để build và chạy XCTest trên Simulator."
+      "description": "Xcode command-line tool for building and running XCTest suites on the Simulator."
     },
     {
       "name": "xcrun",
       "binary": "xcrun",
       "required": true,
-      "description": "Trình điều khiển công cụ Xcode và iOS Simulator (xcrun simctl)."
+      "description": "Xcode developer tool runner and iOS Simulator controller (xcrun simctl)."
     },
     {
       "name": "swift",
       "binary": "swift",
       "required": false,
-      "description": "Trình biên dịch và kiểm thử Swift Package Manager."
+      "description": "Swift compiler and Swift Package Manager test runner."
     }
   ],
   "candidate_checks": [
@@ -43,27 +43,27 @@
       "command_example": "xcodebuild test -scheme App -destination 'platform=iOS Simulator,name=iPhone 16'",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Biên dịch và chạy XCTest trên iOS Simulator theo scheme thực tế của repo."
+      "description": "Build and run XCTest on the iOS Simulator using the repository's actual scheme."
     },
     {
       "id": "ios-swift-package-test",
       "command_example": "swift test",
       "status": "example_unverified",
       "requires_consumer_acceptance": true,
-      "description": "Chạy kiểm thử đơn vị cho các Swift package độc lập trong dự án."
+      "description": "Run unit tests for standalone Swift packages in the project."
     }
   ],
   "expected_evidence": [
-    "Mã thoát thực tế (exit code) của lệnh xcodebuild hoặc swift test do repo chấp thuận",
-    "Bằng chứng phạm vi file (scope) hợp lệ và git diff --check",
-    "Kết quả phân loại bằng chứng từ Jev (jev-1.13.0) và đánh giá từ fresh reviewer"
+    "Actual exit codes of the xcodebuild or swift test commands accepted by the repository",
+    "Scope verification of modified files and git diff --check output",
+    "Evidence triage report from Jev (jev-1.13.0) and evaluation from a fresh reviewer"
   ],
   "special_risks": [
-    "Vi phạm cô lập luồng giao diện (@MainActor / main thread) gây crash lúc chạy",
-    "Rò rỉ bộ nhớ do retain cycle trong closure hoặc Combine/async stream",
-    "Thay đổi ngoài ý muốn đối với code signing, entitlements hoặc quyền riêng tư trong Info.plist"
+    "UI thread isolation violations (@MainActor / main thread) causing runtime crashes",
+    "Memory leaks from retain cycles in closures or Combine/async streams",
+    "Unintended changes to code signing, entitlements, or privacy permissions in Info.plist"
   ],
   "quant_escalation_required_when": [
-    "Tính toán hoặc xác thực logic PnL, funding, liquidation, margin hoặc risk ngay trên ứng dụng"
+    "Computing or validating PnL, funding, liquidation, margin, or risk logic directly in the application"
   ]
 }

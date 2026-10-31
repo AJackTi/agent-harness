@@ -1,40 +1,44 @@
 # AJACKTI Agent Harness
 
-Khung điều phối agent cá nhân đa miền (reusable multi-domain agent harness) của AJACKTI. Repository này là nguồn thẩm quyền duy nhất cho chính sách external-first với `agy`, cấu hình hồ sơ miền khả tổ hợp (`backend`, `frontend`, `dashboard`, `ios`, `android`, `quant`, `devops`, `data`), và công cụ CLI chuẩn hóa kiểm chứng.
+A reusable multi-domain agent orchestration harness (`agent-harness`) by AJACKTI. This repository is the single source of authority for external-first `agy` execution policy, composable domain profile configurations (`backend`, `frontend`, `dashboard`, `ios`, `android`, `quant`, `devops`, `data`), and standardized verification CLI tooling.
 
-- **Điểm vào Chính sách**: [AGENTS.md](AGENTS.md) | [CLAUDE.md](CLAUDE.md) | [core/policy.json](core/policy.json)
-- **Tài liệu Kiến trúc & Quy trình**: [docs/README.md](docs/README.md) | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | [docs/WORKFLOW.md](docs/WORKFLOW.md) | [docs/PROVENANCE.md](docs/PROVENANCE.md)
+- **Policy Entrypoints**: [AGENTS.md](AGENTS.md) | [CLAUDE.md](CLAUDE.md) | [core/policy.json](core/policy.json)
+- **Architecture & Workflow Docs**: [docs/README.md](docs/README.md) | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | [docs/WORKFLOW.md](docs/WORKFLOW.md) | [docs/PROVENANCE.md](docs/PROVENANCE.md)
 
-## 1. Quickstart (Khởi động Nhanh)
+## 1. Quickstart
 
-Yêu cầu môi trường: **Python `>= 3.11`** (chỉ dùng thư viện chuẩn `stdlib`, hoàn toàn offline cho các lệnh tra cứu/xác thực). Các lệnh `list`, `show`, `validate`, `doctor` đều hỗ trợ cờ `--json` (và cờ toàn cục `--repo-root PATH` đặt trước tên lệnh phụ):
+Requirements: **Python `>= 3.11`** (uses only the Python standard library `stdlib`; completely offline for inspection and validation commands). The `list`, `show`, `validate`, and `doctor` subcommands all support `--json` (and the global `--repo-root PATH` flag placed before the subcommand name):
 
 ```bash
-# 1. Liệt kê tất cả domain profiles đã đăng ký (văn bản hoặc JSON)
+# Clone the repository and enter the directory
+git clone https://github.com/ajackti/agent-harness.git
+cd agent-harness
+
+# 1. List all registered domain profiles (plain text or JSON)
 python3 scripts/harness.py list
 python3 scripts/harness.py list --json
 
-# 2. Xem chi tiết một profile theo ID chính tắc hoặc alias (kế thừa, công cụ, candidate checks, rủi ro)
+# 2. Show full details for a profile by canonical ID or alias (inheritance, tools, candidate checks, risks)
 python3 scripts/harness.py show dashboard
 python3 scripts/harness.py show backend/typescript --json
 
-# 3. Xác thực toàn bộ schema JSON, templates chưa điền và liên kết Markdown nội bộ
+# 3. Validate all JSON schemas, unresolved templates, and internal Markdown links
 python3 scripts/harness.py validate
 python3 scripts/harness.py validate --json
 
-# 4. Kiểm tra công cụ hệ thống (agy, jev-pool, runner) và lọc theo một hoặc nhiều profile
+# 4. Check system tools (agy, jev-pool, runners) and filter by one or more profiles
 python3 scripts/harness.py doctor
 python3 scripts/harness.py doctor --profile dashboard --profile backend/typescript --json
 
-# 5. Kiểm thử bộ unit test offline
+# 5. Run the offline unit test suite
 python3.11 -B -m unittest discover -s tests
 python3 -B -m unittest discover -s tests
 ```
 
-## 2. Cấu trúc Thư mục Thực tế (Actual Folder Tree)
+## 2. Actual Folder Tree
 
 ```text
-ajackti-agent-harness/
+agent-harness/
 ├── .github/
 │   └── workflows/
 │       └── validate.yml
@@ -99,24 +103,24 @@ ajackti-agent-harness/
     └── test_run_contract.py
 ```
 
-## 3. Ví dụ Quy trình Thực thi (`run`)
+## 3. Execution Workflow Examples (`run`)
 
-CLI [scripts/harness.py](scripts/harness.py) hỗ trợ các lệnh `list`, `show`, `doctor`, `validate`, và `run` (kết hợp cùng [scripts/run_contract.py](scripts/run_contract.py) và [scripts/run_adapter.py](scripts/run_adapter.py)). Lệnh `run` được điều khiển **tường minh và duy nhất bởi các tham số CLI** (không hỗ trợ `--json`):
+The [scripts/harness.py](scripts/harness.py) CLI supports the `list`, `show`, `doctor`, `validate`, and `run` subcommands (powered by [scripts/run_contract.py](scripts/run_contract.py) and [scripts/run_adapter.py](scripts/run_adapter.py)). The `run` subcommand is driven **explicitly and exclusively by CLI arguments** (`--json` is not supported):
 
-### Cờ của lệnh `run` & Hợp đồng Đầu vào
-- `--workspace PATH` (bắt buộc): đường dẫn tới thư mục thực (không phải symlink) của repository tiêu thụ.
-- `--packet PATH` (bắt buộc): đường dẫn tới file task packet UTF-8 hợp lệ (`<= 8000` ký tự), không còn `<UNRESOLVED:...>` hay placeholder (`TBD`, `TODO`, `PLACEHOLDER`, `UNRESOLVED`, `CHANGEME`). Packet bắt buộc có đúng một dòng tiêu đề không thụt lề đầu dòng cho mỗi khóa: `TASK: <mục tiêu>`, `WORK_KIND: task`, và `QUANT_SEAM: false`.
-- `--scope FILE [FILE ...]` (bắt buộc): danh sách từng đường dẫn **file** tương đối riêng lẻ trong `--workspace` (không nhận thư mục, không kết thúc bằng `/`, không dùng `..` hay symlink, không chạm vào `.git`, `.env*`, `secrets/`, `credentials/`, hoặc các file cấu hình bảo vệ).
-- `--verify-cmd CMD` (bắt buộc, lặp lại được): từng lệnh kiểm chứng đơn lẻ đã được chủ sở hữu repo chấp thuận (cấm toán tử nối lệnh/chuyển hướng shell như `;`, `&&`, `||`, `|`, `>`, `<`, `$()`).
-- `--output-dir PATH` (bắt buộc): đường dẫn thư mục **mới chưa tồn tại** (không phải symlink), nằm **bên ngoài** `--workspace`, và có thư mục cha trực tiếp đã tồn tại, có quyền ghi/duyệt (`W_OK | X_OK`).
-- `--profile PROFILE` (bắt buộc, lặp lại được): một hoặc nhiều ID profile chính tắc hoặc alias từ [harness.json](harness.json).
-- `--work-kind {task,quant}` (bắt buộc): loại seam thực thi (`task` hoặc `quant`).
-- `--id TASK_ID` (tùy chọn): mã định danh tác vụ hợp lệ (mặc định lấy theo phần tên `stem` của file packet).
-- `--worker-timeout SECONDS` (tùy chọn): thời gian chờ worker nguyên dương tính bằng giây (mặc định `1800`).
-- `--skills-root PATH` (tùy chọn): thư mục gốc thực (không phải symlink) chứa skills (mặc định `~/.agents/skills`).
-- `--dry-run` (tùy chọn): chạy hoàn toàn offline (không kiểm tra `agy`/`jev-pool` trên `PATH` và không gọi tiến trình ngoài), **nhưng vẫn bắt buộc** có script runner an toàn `antigravity-task-runner/scripts/run_workflow.py` bên dưới `--skills-root` cùng `--workspace`, `--packet`, `--scope`, `--output-dir` hợp lệ.
+### `run` Flags & Input Contract
+- `--workspace PATH` (required): path to the real (non-symlink) directory of the consumer repository.
+- `--packet PATH` (required): path to a valid UTF-8 task packet file (`<= 8000` characters) with no remaining `<UNRESOLVED:...>` markers or placeholders (`TBD`, `TODO`, `PLACEHOLDER`, `UNRESOLVED`, `CHANGEME`). The packet must contain exactly one unindented header line for each key: `TASK: <objective>`, `WORK_KIND: task`, and `QUANT_SEAM: false`.
+- `--scope FILE [FILE ...]` (required): list of individual relative **file** paths within `--workspace` (no directories, no trailing `/`, no `..` or symlinks, and must not touch `.git`, `.env*`, `secrets/`, `credentials/`, or protected configuration files).
+- `--verify-cmd CMD` (required, repeatable): each single verification command accepted by the repository owner (shell chaining/redirection operators such as `;`, `&&`, `||`, `|`, `>`, `<`, `$()` are forbidden).
+- `--output-dir PATH` (required): path to a **new, non-existent** directory (non-symlink) located **outside** `--workspace`, whose immediate parent directory already exists and is writable/traversable (`W_OK | X_OK`).
+- `--profile PROFILE` (required, repeatable): one or more canonical profile IDs or aliases from [harness.json](harness.json).
+- `--work-kind {task,quant}` (required): execution seam type (`task` or `quant`).
+- `--id TASK_ID` (optional): valid task identifier (defaults to the `stem` of the packet file).
+- `--worker-timeout SECONDS` (optional): positive integer worker timeout in seconds (defaults to `1800`).
+- `--skills-root PATH` (optional): real (non-symlink) root directory containing skills (defaults to `~/.agents/skills`).
+- `--dry-run` (optional): runs completely offline (does not check `agy`/`jev-pool` on `PATH` and does not spawn external processes), **but still requires** a safe runner script `antigravity-task-runner/scripts/run_workflow.py` under `--skills-root` along with valid `--workspace`, `--packet`, `--scope`, and `--output-dir` arguments.
 
-### Ví dụ 1: Dry-run cho Tác vụ Kỹ thuật Chung (`task`)
+### Example 1: Dry-Run for a General Engineering Task (`task`)
 
 ```bash
 python3 scripts/harness.py run \
@@ -131,12 +135,12 @@ python3 scripts/harness.py run \
   --dry-run
 ```
 
-Lệnh trên xác thực hợp đồng packet/workspace/scope/output-dir, kiểm tra sự tồn tại an toàn của script runner trong `--skills-root`, sàng lọc từ khóa định lượng bảo thủ trên dòng `TASK:`, và in ra lệnh `shlex.join` gọi tới `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` kèm `--min-reviewers 1 --max-reworks 2 --no-resume-worker`:
-- **Số lượng reviewer tối thiểu (`--min-reviewers`)**: được tính bằng **giá trị lớn nhất (`max`)** giữa chính sách lõi (`core/policy.json`) và toàn bộ các profile đã chọn cùng chuỗi kế thừa (`extends` / `lineage`). Cấu hình hiện tại mặc định là `1`; cổng review cài đặt (`jev_review_gate.py`) hỗ trợ trong khoảng `1..4` (nếu vượt ngoài `1..4` sẽ bị chặn `BLOCKED`).
-- **Cờ `--no-resume-worker`**: được truyền cho workflow gốc (`run_workflow.py`), **không phải** cờ trực tiếp của CLI `agy` hay của phiên reviewer. Các worker và fresh reviewer đều ghim cố định `gemini-4-argon-high --effort high` ở chế độ `request-review`; ngữ cảnh mới trên cùng model chỉ mang tính **độc lập (`independent`)**, **không mạnh hơn (`not stronger`)**.
-- **Vì sao cần chia nhỏ phạm vi tác vụ (`--scope`)**: bên cạnh giới hạn `<= 8000` ký tự của file task packet đầu vào, cổng review cài đặt bên ngoài giới hạn **focused diff ở mức `12000` ký tự** và **internal review packet ở mức `20000` ký tự**. Hãy tách công việc thành các tác vụ nhỏ, tập trung; tuyệt đối không nới lỏng cổng kiểm tra và không nén/rút gọn mã nguồn chỉ để lọt giới hạn ký tự.
+The command above validates the packet/workspace/scope/output-dir contract, verifies the safe existence of the runner script under `--skills-root`, performs a conservative quantitative keyword screen on the `TASK:` header line, and prints the `shlex.join` command invoking `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` with `--min-reviewers 1 --max-reworks 2 --no-resume-worker`:
+- **Minimum reviewer count (`--min-reviewers`)**: computed as the **maximum (`max`)** across the core policy (`core/policy.json`) and all selected profiles along with their inheritance chain (`extends` / `lineage`). The current configuration defaults to `1`; the installed review gate (`jev_review_gate.py`) supports the range `1..4` (values outside `1..4` fail closed with `BLOCKED`).
+- **The `--no-resume-worker` flag**: passed to the upstream workflow (`run_workflow.py`), **not** directly to the `agy` CLI or reviewer sessions. Both workers and fresh reviewers are pinned to `gemini-4-argon-high --effort high` under `request-review` mode; a fresh context on the same model is **independent**, **not stronger**.
+- **Why task scope (`--scope`) must be kept small**: in addition to the `<= 8000` character limit on the input task packet file, the external installed review gate caps the **focused diff at `12000` characters** and the **internal review packet at `20000` characters**. Split work into small, focused tasks; never loosen review gates and never compress or minify source code just to fit within character limits.
 
-### Ví dụ 2: Tác vụ Dashboard/Data có PnL/Funding/Risk (`quant` — Hiện `BLOCKED`)
+### Example 2: Dashboard/Data Task Involving PnL/Funding/Risk (`quant` — Currently `BLOCKED`)
 
 ```bash
 python3 scripts/harness.py run \
@@ -150,11 +154,11 @@ python3 scripts/harness.py run \
   --work-kind quant
 ```
 
-Lệnh này sẽ dừng rõ ràng với trạng thái `BLOCKED` (mã thoát khác `0`) và thông báo điều kiện mở khóa tại [quant/AGENTS.md](quant/AGENTS.md).
+This command fails closed with a `BLOCKED` status (non-zero exit code) and reports the unlock requirements documented in [quant/AGENTS.md](quant/AGENTS.md).
 
-## 4. Giới hạn Trung thực (Honest Limitations)
+## 4. Honest Limitations
 
-1. **`repo-context.json` và `candidate_checks` Chỉ Mang Tính Tham khảo**: File [templates/repo-context.json](templates/repo-context.json) (cũng như mọi bản sao `repo-context.json`) chỉ là tài liệu ngữ cảnh tham khảo (`advisory_only`), **không** được `harness.py run` đọc làm quyền phê duyệt thực thi hay nguồn lệnh chạy. Các `candidate_checks` trong `<domain>/profile.json` chỉ là gợi ý chưa kiểm chứng (`example_unverified`) và không bao giờ tự động chạy; mọi tham số thực thi đều do đối số CLI quyết định tường minh.
-2. **Không Đóng gói Sẵn Runner hay Công cụ**: Repository này chỉ là lớp khung điều phối và thin adapter. Ngay cả `--dry-run` (offline) cũng yêu cầu script `antigravity-task-runner/scripts/run_workflow.py` tồn tại an toàn dưới `--skills-root`; khi chạy thực tế (không có `--dry-run`), máy trạm cần có thêm binary thực thi được của `agy` và `jev-pool` (`jev-1.13.0`).
-3. **Thực thi `quant` Đang Bị Chặn Chủ động (`BLOCKED`)**: Người dùng yêu cầu một **stronger reviewer** cho toán tài chính/PnL/funding/liquidation/risk. Việc quét từ khóa trên dòng `TASK:` trong [scripts/run_contract.py](scripts/run_contract.py) chỉ là bước sàng lọc bảo thủ bổ trợ (supplemental conservative heuristic); **trách nhiệm phân loại ngữ nghĩa seam thuộc về người điều phối (coordinator)**. Việc mở khóa `quant` trong tương lai đòi hỏi triển khai/tích hợp đường chạy `quant` riêng được người dùng phê duyệt cùng bằng chứng và bài kiểm thử stronger reviewer, **không chỉ đơn thuần là bật cờ `execution_enabled`** trong [core/policy.json](core/policy.json).
-4. **Không Chứa Mã Ứng dụng Mẫu hay Thuật toán Giao dịch**: Repository này chỉ cung cấp công cụ kỹ thuật tổng quát, hoàn toàn không chứa công thức tài chính, kết quả backtest, hay mã khởi tạo ứng dụng.
+1. **`repo-context.json` and `candidate_checks` Are Advisory Only**: [templates/repo-context.json](templates/repo-context.json) (as well as any copied `repo-context.json` file) serves solely as reference context documentation (`advisory_only`) and is **never** read by `harness.py run` for execution authorization or as a source of commands. Likewise, `candidate_checks` in `<domain>/profile.json` are unverified suggestions (`example_unverified`) and are never executed automatically; all execution parameters are determined explicitly by CLI arguments.
+2. **No Bundled Runners or External Binaries**: This repository provides only the orchestration framework and thin adapter layer. Even `--dry-run` (offline) requires the `antigravity-task-runner/scripts/run_workflow.py` script to exist safely under `--skills-root`; live execution (without `--dry-run`) additionally requires executable `agy` and `jev-pool` (`jev-1.13.0`) binaries on the host workstation.
+3. **`quant` Execution Is Actively `BLOCKED`**: The repository owner requires a **stronger reviewer** for financial mathematics, PnL, funding, liquidation, and risk logic. Keyword scanning on the `TASK:` header line in [scripts/run_contract.py](scripts/run_contract.py) is only a supplemental conservative heuristic; **semantic seam classification remains the responsibility of the coordinator**. Unlocking `quant` execution in the future requires implementing and integrating an owner-approved dedicated `quant` execution path backed by stronger-reviewer proof and tests—**not merely flipping the `execution_enabled` flag** in [core/policy.json](core/policy.json).
+4. **No Sample Application Code or Trading Algorithms**: This repository provides general-purpose engineering harness tooling only and contains no financial formulas, backtest results, or application starter code.

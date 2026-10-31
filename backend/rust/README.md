@@ -1,15 +1,15 @@
 # Backend Rust Profile (`backend/rust`)
 
-Hồ sơ điều phối cho dịch vụ và thành phần hệ thống viết bằng Rust ([profile.json](profile.json)), kế thừa chính sách lõi tại [../../core/policy.json](../../core/policy.json).
+Orchestration profile for Rust backend services and system components ([profile.json](profile.json)), inheriting the core policy from [../../core/policy.json](../../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `cargo`, `rustc`, `rustfmt` (tùy chọn).
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
-  - `cargo check --all-targets` (kiểm tra biên dịch và kiểu nhanh)
-  - `cargo test` (chạy kiểm thử đơn vị và tích hợp)
-  - `cargo clippy --all-targets -- -D warnings` (kiểm tra lint nghiêm ngặt)
-- **Bằng chứng kỳ vọng**: mã thoát thực tế của các lệnh `cargo` được repo chấp thuận, kèm kiểm tra `scope` và `git diff --check`.
-- **Rủi ro đặc thù**: lạm dụng `unwrap()`/`expect()` gây panic lúc chạy, khối `unsafe` không có bất biến bảo chứng, hoặc tràn số nguyên trong tính toán. Nếu xử lý PnL/funding/liquidation/risk, bắt buộc chuyển sang [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
+- **Primary tools**: `cargo`, `rustc`, `rustfmt` (optional).
+- **Suggested verification commands (`example_unverified`)**:
+  - `cargo check --all-targets` (fast compilation and type checking)
+  - `cargo test` (run unit and integration tests)
+  - `cargo clippy --all-targets -- -D warnings` (strict lint checking)
+- **Expected evidence**: actual exit codes of the repository-accepted `cargo` commands, along with `scope` verification and `git diff --check`.
+- **Domain-specific risks**: overusing `unwrap()`/`expect()` causing runtime panics, `unsafe` blocks without proven safety invariants, or integer overflow in calculations. If the work involves PnL/funding/liquidation/risk, it must escalate to [../../quant/README.md](../../quant/README.md) (`--work-kind quant`).
 
-Xem thêm danh mục backend tại [../README.md](../README.md).
+See the backend domain index at [../README.md](../README.md).

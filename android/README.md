@@ -1,13 +1,13 @@
 # Android Domain Profile (`android`)
 
-Hồ sơ điều phối cho ứng dụng di động Android / Kotlin / Gradle ([profile.json](profile.json)), kế thừa chính sách lõi tại [../core/policy.json](../core/policy.json).
+Orchestration profile for Android / Kotlin / Gradle mobile applications ([profile.json](profile.json)), inheriting the core policy from [../core/policy.json](../core/policy.json).
 
-## Yêu cầu Công cụ & Kiểm chứng
+## Tooling & Verification Requirements
 
-- **Công cụ chính**: `gradle` (hoặc wrapper `./gradlew` trong repository tiêu thụ), `adb` (Android SDK / kết nối emulator).
-- **Lệnh kiểm tra gợi ý (`example_unverified`)**:
-  - `./gradlew testDebugUnitTest` (chạy unit test trên JVM)
-  - `./gradlew lintDebug` (phân tích tĩnh Android Lint)
-  - `./gradlew connectedDebugAndroidTest` (kiểm thử tích hợp trên emulator khi repo yêu cầu)
-- **Bằng chứng kỳ vọng**: mã thoát thực tế của các tác vụ Gradle do repo chấp thuận, kèm kiểm tra `scope` và `git diff --check`.
-- **Rủi ro đặc thù**: rò rỉ `Context`/`Activity` qua vòng đời cấu hình, chặn luồng giao diện chính (`Main` dispatcher), hoặc mở rộng quyền trong `AndroidManifest.xml` mà không được duyệt. Nếu có tính toán PnL/funding/liquidation/risk, bắt buộc chọn [../quant/README.md](../quant/README.md) (`--work-kind quant`).
+- **Primary tools**: `gradle` (or the `./gradlew` wrapper in the consumer repository), `adb` (Android SDK / emulator connection).
+- **Suggested verification commands (`example_unverified`)**:
+  - `./gradlew testDebugUnitTest` (run unit tests on the JVM)
+  - `./gradlew lintDebug` (Android Lint static analysis)
+  - `./gradlew connectedDebugAndroidTest` (instrumented tests on the emulator when required by the repository)
+- **Expected evidence**: actual exit codes of the Gradle tasks accepted by the consumer repository, along with `scope` verification and `git diff --check`.
+- **Domain-specific risks**: `Context`/`Activity` leaks across configuration changes, blocking the main UI thread (`Main` dispatcher), or unapproved permission expansion in `AndroidManifest.xml`. If the work involves PnL/funding/liquidation/risk calculations, you must select [../quant/README.md](../quant/README.md) (`--work-kind quant`).
