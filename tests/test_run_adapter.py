@@ -37,11 +37,13 @@ class RunAdapterAndCliTests(unittest.TestCase):
         home_patcher = mock.patch.object(Path, "home", return_value=self.home)
         home_patcher.start()
         self.addCleanup(home_patcher.stop)
-        # Isolate tests from any ambient coordinator AGY_MODEL selection; restored on cleanup.
+        # Isolate tests from any ambient coordinator AGY_MODEL/WORKFLOW_WORKER/WORKFLOW_CONTEXT selections; restored on cleanup.
         env_patcher = mock.patch.dict(os.environ, {}, clear=False)
         env_patcher.start()
         self.addCleanup(env_patcher.stop)
         os.environ.pop("AGY_MODEL", None)
+        os.environ.pop("WORKFLOW_WORKER", None)
+        os.environ.pop("WORKFLOW_CONTEXT", None)
 
         self.ws = self.base / "workspace"
         (self.ws / "src").mkdir(parents=True)
@@ -180,14 +182,20 @@ class RunAdapterAndCliTests(unittest.TestCase):
             "2",
             "--worker-timeout",
             "1800",
+            "--context-mode",
+            "lean",
             "--no-resume-worker",
         ]
         self.assertNotIn("--kind", parsed_argv)
-        # Unset AGY_MODEL keeps the compatibility Gemini default, shown explicitly as a prefix.
+        # Unset AGY_MODEL/WORKFLOW_WORKER/WORKFLOW_CONTEXT keep compatibility defaults, shown explicitly as prefixes.
         self.assertEqual(parsed_argv[0], "AGY_MODEL=gemini-4-argon-high")
-        self.assertEqual(parsed_argv[1:], expected_argv)
+        self.assertEqual(parsed_argv[1], "WORKFLOW_WORKER=agy")
+        self.assertEqual(parsed_argv[2], "WORKFLOW_CONTEXT=lean")
+        self.assertEqual(parsed_argv[3:], expected_argv)
         self.assertEqual(
-            lines[0], "AGY_MODEL=gemini-4-argon-high " + shlex.join(expected_argv)
+            lines[0],
+            "AGY_MODEL=gemini-4-argon-high WORKFLOW_WORKER=agy WORKFLOW_CONTEXT=lean "
+            + shlex.join(expected_argv),
         )
 
     def test_aliases_multiple_profiles_explicit_id_and_timeout_and_advisory_repo_context(
@@ -281,14 +289,21 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertEqual(child_env.get("PATH"), str(self.fake_bin))
         self.assertEqual(child_env.get("HARNESS_ENV_SENTINEL"), "keep-value")
         self.assertEqual(child_env.get("AGY_MODEL"), "gemini-4-argon-high")
+        self.assertEqual(child_env.get("WORKFLOW_WORKER"), "agy")
+        self.assertEqual(child_env.get("WORKFLOW_CONTEXT"), "lean")
         self.assertNotIn("AGY_MODEL", os.environ)
+        self.assertNotIn("WORKFLOW_WORKER", os.environ)
+        self.assertNotIn("WORKFLOW_CONTEXT", os.environ)
         self.assertEqual(called_argv[0], sys.executable)
         self.assertEqual(called_argv[1], str(self.runner_script))
         self.assertEqual(called_argv[2], str(self.pkt.resolve()))
+        self.assertEqual(
+            called_argv[called_argv.index("--context-mode") + 1], "lean"
+        )
         self.assertIn("--no-resume-worker", called_argv)
 
-        # When env_path is None, the inherited environment (including PATH) is preserved and only
-        # AGY_MODEL is pinned explicitly in a copied child environment.
+        # When env_path is None, the inherited environment (including PATH) is preserved and
+        # AGY_MODEL, WORKFLOW_WORKER, and WORKFLOW_CONTEXT are pinned explicitly in a copied child env.
         inherited_calls: list[dict[str, object]] = []
 
         def _fake_inherited_run(
@@ -314,7 +329,13 @@ class RunAdapterAndCliTests(unittest.TestCase):
         inherited_env = inherited_calls[0].get("env")
         self.assertIsInstance(inherited_env, dict)
         self.assertEqual(
-            inherited_env, {**inherited_before, "AGY_MODEL": "gemini-4-argon-high"}
+            inherited_env,
+            {
+                **inherited_before,
+                "AGY_MODEL": "gemini-4-argon-high",
+                "WORKFLOW_WORKER": "agy",
+                "WORKFLOW_CONTEXT": "lean",
+            },
         )
 
         # Verify nonzero exit codes (1, 2, 3) and outputs propagate verbatim without manufacturing PASS.
@@ -875,6 +896,17 @@ class RunAdapterAndCliTests(unittest.TestCase):
             code, _, err = self._invoke_main(argv, env_path=str(self.fake_bin))
         return code, err, calls
 
+    def _install_devin_support(self, *, with_executable: bool = True) -> tuple[Path, Path, Path]:
+        devin_worker_script = self.runner_script.parent / "devin_worker.py"
+        gate_script = self.runner_script.parent / "jev_review_gate.py"
+        devin_worker_script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        gate_script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        devin_bin = self.fake_bin / "devin"
+        if with_executable:
+            devin_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            devin_bin.chmod(0o755)
+        return devin_worker_script, gate_script, devin_bin
+
     def test_explicit_and_default_model_selection_pins_dry_run_and_child_env(self) -> None:
         cases = [
             ("claude-opus-5-5-high", "claude-opus-5-5-high"),
@@ -897,7 +929,10 @@ class RunAdapterAndCliTests(unittest.TestCase):
                 self.assertEqual(code, 0, msg=err)
                 parsed = shlex.split(out.strip())
                 self.assertEqual(parsed[0], f"AGY_MODEL={expected}")
-                self.assertEqual(parsed[1], sys.executable)
+                self.assertEqual(parsed[1], "WORKFLOW_WORKER=agy")
+                self.assertEqual(parsed[2], "WORKFLOW_CONTEXT=lean")
+                self.assertEqual(parsed[3], sys.executable)
+                self.assertEqual(parsed[parsed.index("--context-mode") + 1], "lean")
                 self.assertIn("--no-resume-worker", parsed)
 
                 code_real, err_real, calls = self._capture_real_run(self._base_cli_args())
@@ -907,9 +942,12 @@ class RunAdapterAndCliTests(unittest.TestCase):
                 self.assertIs(kwargs.get("shell"), False)
                 self.assertEqual(run_argv[0], sys.executable)
                 self.assertNotIn(f"AGY_MODEL={expected}", run_argv)
+                self.assertEqual(run_argv[run_argv.index("--context-mode") + 1], "lean")
                 child_env = kwargs.get("env")
                 assert isinstance(child_env, dict)
                 self.assertEqual(child_env["AGY_MODEL"], expected)
+                self.assertEqual(child_env["WORKFLOW_WORKER"], "agy")
+                self.assertEqual(child_env["WORKFLOW_CONTEXT"], "lean")
                 self.assertEqual(child_env["PATH"], str(self.fake_bin))
                 self.assertEqual(os.environ, before_env)
 
@@ -925,6 +963,11 @@ class RunAdapterAndCliTests(unittest.TestCase):
                     dry_run=True,
                 )
                 self.assertEqual(plan["selected_model"], expected)
+                self.assertEqual(plan["reviewer_model"], expected)
+                self.assertEqual(plan["worker_provider"], "agy")
+                self.assertEqual(plan["context_mode"], "lean")
+                self.assertEqual(plan["expected_worker_model"], expected)
+                self.assertEqual(plan["worker_model"], expected)
 
     def test_unsupported_or_whitespace_model_blocks_before_any_work(self) -> None:
         bad_values = (" ", "\t", "claude-opus-5-5-high ", " gemini-4-argon-high", "gemini-pro", "CLAUDE-OPUS-5-5-HIGH")
@@ -951,6 +994,492 @@ class RunAdapterAndCliTests(unittest.TestCase):
                     self.assertNotIn("Traceback", err)
                     self.assertEqual(run_mock.call_count, 0)
                     self.assertEqual(os.environ["AGY_MODEL"], bad)
+
+    def test_workflow_worker_and_context_matrix_defaults_env_argv_and_plan(self) -> None:
+        self._install_devin_support(with_executable=True)
+        # Cover unset/empty defaults, 2 workers x 3 contexts across all rework budgets (None, 0, 1, 2),
+        # and explicit Opus/Gemini model pins across the 2x3 worker/context matrix.
+        cases: list[tuple[str | None, str, str | None, str, str | None, str, int | None, str, int]] = [
+            (None, "agy", None, "lean", None, "gemini-4-argon-high", None, "2", 2),
+            ("", "agy", "", "lean", "", "gemini-4-argon-high", 0, "0", 0),
+        ]
+        for worker in ("agy", "devin"):
+            for ctx in ("lean", "compact", "full"):
+                for raw_reworks, exp_reworks_str, exp_reworks_int in (
+                    (None, "2", 2),
+                    (0, "0", 0),
+                    (1, "1", 1),
+                    (2, "2", 2),
+                ):
+                    cases.append(
+                        (
+                            worker,
+                            worker,
+                            ctx,
+                            ctx,
+                            "gemini-4-argon-high",
+                            "gemini-4-argon-high",
+                            raw_reworks,
+                            exp_reworks_str,
+                            exp_reworks_int,
+                        )
+                    )
+                cases.append(
+                    (
+                        worker,
+                        worker,
+                        ctx,
+                        ctx,
+                        "claude-opus-5-5-high",
+                        "claude-opus-5-5-high",
+                        1,
+                        "1",
+                        1,
+                    )
+                )
+
+        for (
+            raw_worker,
+            exp_worker,
+            raw_ctx,
+            exp_ctx,
+            raw_model,
+            exp_model,
+            raw_reworks,
+            exp_reworks_str,
+            exp_reworks_int,
+        ) in cases:
+            with self.subTest(
+                worker=raw_worker,
+                context=raw_ctx,
+                model=raw_model,
+                reworks=raw_reworks,
+            ):
+                os.environ.pop("AGY_MODEL", None)
+                os.environ.pop("WORKFLOW_WORKER", None)
+                os.environ.pop("WORKFLOW_CONTEXT", None)
+                os.environ["SENTINEL_KEEP"] = "untouched"
+                if raw_model is not None:
+                    os.environ["AGY_MODEL"] = raw_model
+                if raw_worker is not None:
+                    os.environ["WORKFLOW_WORKER"] = raw_worker
+                if raw_ctx is not None:
+                    os.environ["WORKFLOW_CONTEXT"] = raw_ctx
+                before_env = dict(os.environ)
+
+                with (
+                    mock.patch.object(
+                        subprocess,
+                        "run",
+                        side_effect=AssertionError("no subprocess in dry-run"),
+                    ),
+                    mock.patch.object(
+                        shutil,
+                        "which",
+                        side_effect=AssertionError("no PATH probe in dry-run"),
+                    ),
+                ):
+                    code_dry, out_dry, err_dry = self._invoke_main(
+                        self._base_cli_args(
+                            max_reworks=raw_reworks, dry_run=True
+                        )
+                    )
+                self.assertEqual(code_dry, 0, msg=err_dry)
+                self.assertEqual(err_dry, "")
+                parsed = shlex.split(out_dry.strip())
+                self.assertEqual(
+                    parsed[:3],
+                    [
+                        f"AGY_MODEL={exp_model}",
+                        f"WORKFLOW_WORKER={exp_worker}",
+                        f"WORKFLOW_CONTEXT={exp_ctx}",
+                    ],
+                )
+                self.assertEqual(parsed[3], sys.executable)
+                self.assertEqual(
+                    parsed[parsed.index("--context-mode") + 1], exp_ctx
+                )
+                self.assertEqual(
+                    parsed[parsed.index("--max-reworks") + 1],
+                    exp_reworks_str,
+                )
+                self.assertEqual(parsed[-1], "--no-resume-worker")
+                self.assertEqual(os.environ, before_env)
+
+                code_real, err_real, calls = self._capture_real_run(
+                    self._base_cli_args(
+                        max_reworks=raw_reworks, dry_run=False
+                    )
+                )
+                self.assertEqual(code_real, 0, msg=err_real)
+                self.assertEqual(len(calls), 1)
+                run_argv, kwargs = calls[0]
+                self.assertIs(kwargs.get("shell"), False)
+                self.assertEqual(
+                    run_argv[run_argv.index("--context-mode") + 1],
+                    exp_ctx,
+                )
+                self.assertEqual(
+                    run_argv[run_argv.index("--max-reworks") + 1],
+                    exp_reworks_str,
+                )
+                self.assertEqual(run_argv[-1], "--no-resume-worker")
+                child_env = kwargs.get("env")
+                assert isinstance(child_env, dict)
+                self.assertIsNot(child_env, os.environ)
+                self.assertEqual(
+                    child_env,
+                    {
+                        **before_env,
+                        "PATH": str(self.fake_bin),
+                        "AGY_MODEL": exp_model,
+                        "WORKFLOW_WORKER": exp_worker,
+                        "WORKFLOW_CONTEXT": exp_ctx,
+                    },
+                )
+                self.assertEqual(os.environ, before_env)
+
+                plan = run_adapter.prepare_run(
+                    workspace=self.ws,
+                    packet_path=self.pkt,
+                    scope=["src/service.ts"],
+                    verify_cmds=["npm test"],
+                    output_dir=self.out_dir,
+                    work_kind="task",
+                    profiles=["frontend"],
+                    max_reworks=raw_reworks,
+                    skills_root=self.skills_root,
+                    env_path=str(self.fake_bin),
+                    dry_run=False,
+                )
+                exp_worker_model = (
+                    "swe-1-6-slow"
+                    if exp_worker == "devin"
+                    else exp_model
+                )
+                self.assertEqual(plan["worker_provider"], exp_worker)
+                self.assertEqual(plan["context_mode"], exp_ctx)
+                self.assertEqual(plan["selected_model"], exp_model)
+                self.assertEqual(plan["reviewer_model"], exp_model)
+                self.assertEqual(
+                    plan["expected_worker_model"], exp_worker_model
+                )
+                self.assertEqual(plan["worker_model"], exp_worker_model)
+                self.assertEqual(plan["max_reworks"], exp_reworks_int)
+                self.assertEqual(os.environ, before_env)
+
+    def test_unsupported_or_whitespace_worker_and_context_block_before_any_work(
+        self,
+    ) -> None:
+        bad_workers = (
+            " ",
+            "\t",
+            " agy",
+            "agy ",
+            "devin ",
+            " devin",
+            "AGY",
+            "DEVIN",
+            "opencode",
+            "claude",
+        )
+        for bad_w in bad_workers:
+            for is_dry in (True, False):
+                with self.subTest(worker=bad_w, dry=is_dry):
+                    os.environ["WORKFLOW_WORKER"] = bad_w
+                    os.environ.pop("WORKFLOW_CONTEXT", None)
+                    with (
+                        mock.patch.object(
+                            subprocess,
+                            "run",
+                            side_effect=AssertionError("must not run"),
+                        ) as run_mock,
+                        mock.patch.object(
+                            shutil,
+                            "which",
+                            side_effect=AssertionError("no prerequisite checks"),
+                        ),
+                        mock.patch.object(
+                            run_adapter.harness,
+                            "load_and_validate_harness",
+                            side_effect=AssertionError("worker must be resolved first"),
+                        ),
+                    ):
+                        code, out, err = self._invoke_main(
+                            self._base_cli_args(dry_run=is_dry),
+                            env_path=str(self.fake_bin),
+                        )
+                    self.assertEqual(code, 2)
+                    self.assertEqual(out, "")
+                    self.assertTrue(err.startswith("BLOCKED"), msg=err)
+                    self.assertIn("WORKFLOW_WORKER", err)
+                    self.assertNotIn("Traceback", err)
+                    self.assertEqual(run_mock.call_count, 0)
+                    self.assertEqual(os.environ["WORKFLOW_WORKER"], bad_w)
+
+        os.environ.pop("WORKFLOW_WORKER", None)
+        bad_contexts = (
+            " ",
+            "\t",
+            " lean",
+            "lean ",
+            " compact",
+            "compact ",
+            "full ",
+            " full",
+            "LEAN",
+            "Lean",
+            "COMPACT",
+            "FULL",
+            "minimal",
+            "default",
+        )
+        for bad_c in bad_contexts:
+            for is_dry in (True, False):
+                with self.subTest(context=bad_c, dry=is_dry):
+                    os.environ["WORKFLOW_CONTEXT"] = bad_c
+                    with (
+                        mock.patch.object(
+                            subprocess,
+                            "run",
+                            side_effect=AssertionError("must not run"),
+                        ) as run_mock,
+                        mock.patch.object(
+                            shutil,
+                            "which",
+                            side_effect=AssertionError("no prerequisite checks"),
+                        ),
+                        mock.patch.object(
+                            run_adapter.harness,
+                            "load_and_validate_harness",
+                            side_effect=AssertionError("context must be resolved first"),
+                        ),
+                    ):
+                        code, out, err = self._invoke_main(
+                            self._base_cli_args(dry_run=is_dry),
+                            env_path=str(self.fake_bin),
+                        )
+                    self.assertEqual(code, 2)
+                    self.assertEqual(out, "")
+                    self.assertTrue(err.startswith("BLOCKED"), msg=err)
+                    self.assertIn("WORKFLOW_CONTEXT", err)
+                    self.assertNotIn("Traceback", err)
+                    self.assertEqual(run_mock.call_count, 0)
+                    self.assertEqual(os.environ["WORKFLOW_CONTEXT"], bad_c)
+
+        os.environ.pop("WORKFLOW_CONTEXT", None)
+        plan = run_adapter.prepare_run(
+            workspace=self.ws,
+            packet_path=self.pkt,
+            scope=["src/service.ts"],
+            verify_cmds=["npm test"],
+            output_dir=self.out_dir,
+            work_kind="task",
+            profiles=["frontend"],
+            skills_root=self.skills_root,
+            dry_run=True,
+        )
+        for bad_ctx_arg in ("", "raw", "lean ", "compact ", None, True):
+            with self.assertRaises(ContractError):
+                run_adapter.build_runner_argv(
+                    self.runner_script,
+                    plan["contract"],
+                    min_reviewers=1,
+                    max_reworks=2,
+                    worker_timeout=1800,
+                    context_mode=bad_ctx_arg,  # type: ignore[arg-type]
+                )
+
+    def test_devin_support_files_executable_agy_reviewer_requirement_and_unsafe_paths(
+        self,
+    ) -> None:
+        # 1. With no devin executable and no devin support files, WORKFLOW_WORKER=agy succeeds in dry-run and real-run.
+        os.environ["WORKFLOW_WORKER"] = "agy"
+        os.environ["WORKFLOW_CONTEXT"] = "full"
+        code_agy_dry, _, err_agy_dry = self._invoke_main(
+            self._base_cli_args(dry_run=True), env_path=str(self.fake_bin)
+        )
+        self.assertEqual(code_agy_dry, 0, msg=err_agy_dry)
+        code_agy_real, err_agy_real, calls_agy = self._capture_real_run(
+            self._base_cli_args(dry_run=False)
+        )
+        self.assertEqual(code_agy_real, 0, msg=err_agy_real)
+        self.assertEqual(len(calls_agy), 1)
+
+        # 2. Selecting WORKFLOW_WORKER=devin without devin_worker.py blocks both dry-run and real-run.
+        os.environ["WORKFLOW_WORKER"] = "devin"
+        with mock.patch.object(
+            subprocess, "run", side_effect=AssertionError("must not run")
+        ):
+            for is_dry in (True, False):
+                code_no_dw, out_no_dw, err_no_dw = self._invoke_main(
+                    self._base_cli_args(dry_run=is_dry), env_path=str(self.fake_bin)
+                )
+                self.assertEqual(code_no_dw, 2, msg=f"dry={is_dry}")
+                self.assertEqual(out_no_dw, "")
+                self.assertIn("BLOCKED", err_no_dw)
+                self.assertIn("devin_worker.py", err_no_dw)
+
+        # 3. Adding devin_worker.py while jev_review_gate.py is still missing blocks both dry-run and real-run.
+        devin_worker_script = self.runner_script.parent / "devin_worker.py"
+        gate_script = self.runner_script.parent / "jev_review_gate.py"
+        devin_worker_script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        with mock.patch.object(
+            subprocess, "run", side_effect=AssertionError("must not run")
+        ):
+            for is_dry in (True, False):
+                code_no_gate, out_no_gate, err_no_gate = self._invoke_main(
+                    self._base_cli_args(dry_run=is_dry), env_path=str(self.fake_bin)
+                )
+                self.assertEqual(code_no_gate, 2, msg=f"dry={is_dry}")
+                self.assertEqual(out_no_gate, "")
+                self.assertIn("BLOCKED", err_no_gate)
+                self.assertIn("jev_review_gate.py", err_no_gate)
+
+        # 4. With both support scripts present, Devin dry-run succeeds without devin executable or PATH probes,
+        #    while Devin real-run blocks because devin executable is missing.
+        gate_script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        with (
+            mock.patch.object(
+                subprocess, "run", side_effect=AssertionError("no subprocess in dry-run")
+            ),
+            mock.patch.object(
+                shutil, "which", side_effect=AssertionError("no PATH probe in dry-run")
+            ),
+        ):
+            code_dev_dry, out_dev_dry, err_dev_dry = self._invoke_main(
+                self._base_cli_args(dry_run=True), env_path=""
+            )
+        self.assertEqual(code_dev_dry, 0, msg=err_dev_dry)
+        self.assertIn("WORKFLOW_WORKER=devin", out_dev_dry)
+
+        with mock.patch.object(
+            subprocess, "run", side_effect=AssertionError("must not run")
+        ):
+            code_no_bin, _, err_no_bin = self._invoke_main(
+                self._base_cli_args(dry_run=False), env_path=str(self.fake_bin)
+            )
+        self.assertEqual(code_no_bin, 2)
+        self.assertIn("BLOCKED", err_no_bin)
+        self.assertIn("devin", err_no_bin)
+
+        # 5. Devin executable lookup order: PATH wins over ~/.local/bin/devin; non-executable on PATH falls back to ~/.local/bin/devin.
+        devin_bin = self.fake_bin / "devin"
+        devin_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        devin_bin.chmod(0o755)
+        local_devin = self.home / ".local" / "bin" / "devin"
+        local_devin.parent.mkdir(parents=True, exist_ok=True)
+        local_devin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        local_devin.chmod(0o755)
+
+        plan_path = run_adapter.prepare_run(
+            workspace=self.ws,
+            packet_path=self.pkt,
+            scope=["src/service.ts"],
+            verify_cmds=["npm test"],
+            output_dir=self.out_dir,
+            work_kind="task",
+            profiles=["frontend"],
+            skills_root=self.skills_root,
+            env_path=str(self.fake_bin),
+            dry_run=False,
+        )
+        self.assertEqual(
+            plan_path["prerequisites"]["devin"], str(devin_bin.resolve())
+        )
+
+        devin_bin.chmod(0o644)
+        plan_local = run_adapter.prepare_run(
+            workspace=self.ws,
+            packet_path=self.pkt,
+            scope=["src/service.ts"],
+            verify_cmds=["npm test"],
+            output_dir=self.out_dir,
+            work_kind="task",
+            profiles=["frontend"],
+            skills_root=self.skills_root,
+            env_path=str(self.fake_bin),
+            dry_run=False,
+        )
+        self.assertEqual(
+            plan_local["prerequisites"]["devin"], str(local_devin.resolve())
+        )
+        devin_bin.chmod(0o755)
+        local_devin.unlink()
+
+        # 6. agy is ALWAYS required for reviewers even when WORKFLOW_WORKER=devin and devin is present.
+        self.agy_bin.unlink()
+        with mock.patch.object(
+            subprocess, "run", side_effect=AssertionError("must not run")
+        ):
+            code_dev_no_agy, _, err_dev_no_agy = self._invoke_main(
+                self._base_cli_args(dry_run=False), env_path=str(self.fake_bin)
+            )
+        self.assertEqual(code_dev_no_agy, 2)
+        self.assertIn("BLOCKED", err_dev_no_agy)
+        self.assertIn("agy", err_dev_no_agy)
+        self.agy_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        self.agy_bin.chmod(0o755)
+
+        # 7. Unsafe helper paths (symlinks to outside or inside skills_root, or directories) block Devin in dry-run and real-run.
+        outside_helper = self.base / "outside_helper.py"
+        outside_helper.write_text("# outside\n", encoding="utf-8")
+        inside_target = self.skills_root / "antigravity-task-runner" / "inside_helper.py"
+        inside_target.write_text("# inside\n", encoding="utf-8")
+
+        for helper_path, helper_name in (
+            (devin_worker_script, "devin_worker.py"),
+            (gate_script, "jev_review_gate.py"),
+        ):
+            for sym_target in (outside_helper, inside_target):
+                helper_path.unlink()
+                helper_path.symlink_to(sym_target)
+                for is_dry in (True, False):
+                    code_sym, _, err_sym = self._invoke_main(
+                        self._base_cli_args(dry_run=is_dry),
+                        env_path=str(self.fake_bin),
+                    )
+                    self.assertEqual(code_sym, 2, msg=f"{helper_name} dry={is_dry}")
+                    self.assertIn("BLOCKED", err_sym)
+                    self.assertIn(helper_name, err_sym)
+
+            helper_path.unlink()
+            helper_path.mkdir()
+            for is_dry in (True, False):
+                code_dir, _, err_dir = self._invoke_main(
+                    self._base_cli_args(dry_run=is_dry),
+                    env_path=str(self.fake_bin),
+                )
+                self.assertEqual(code_dir, 2, msg=f"{helper_name} dir dry={is_dry}")
+                self.assertIn("BLOCKED", err_dir)
+                self.assertIn(helper_name, err_dir)
+            helper_path.rmdir()
+            helper_path.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+        # 8. Quant remains blocked even when WORKFLOW_WORKER=devin and WORKFLOW_CONTEXT=full.
+        quant_pkt = self.base / "quant-devin.md"
+        quant_pkt.write_text(
+            "TASK: Calculate funding rate and PnL\nWORK_KIND: quant\nQUANT_SEAM: true\n",
+            encoding="utf-8",
+        )
+        for is_dry in (True, False):
+            with mock.patch.object(
+                subprocess, "run", side_effect=AssertionError("must not run")
+            ):
+                code_q, out_q, err_q = self._invoke_main(
+                    self._base_cli_args(
+                        packet=quant_pkt,
+                        work_kind="quant",
+                        profiles=["quant"],
+                        max_reworks=0,
+                        dry_run=is_dry,
+                    ),
+                    env_path=str(self.fake_bin),
+                )
+            self.assertNotEqual(code_q, 0)
+            self.assertEqual(out_q, "")
+            self.assertIn("BLOCKED", err_q)
+            self.assertIn("stronger reviewer", err_q)
 
     def test_max_reworks_override_propagates_and_invalid_values_are_rejected(self) -> None:
         for override, expected in ((0, "0"), (1, "1"), (2, "2"), (None, "2")):
@@ -1049,7 +1578,7 @@ class RunAdapterAndCliTests(unittest.TestCase):
         saved_modules = {
             k: sys.modules[k]
             for k in list(sys.modules)
-            if k in ("harness", "run_adapter", "run_contract")
+            if k in ("harness", "run_adapter", "run_contract", "model_policy", "workflow_policy")
             or k.startswith("scripts.")
             or k == "scripts"
         }
@@ -1068,7 +1597,7 @@ class RunAdapterAndCliTests(unittest.TestCase):
                 with self.assertRaises(SystemExit) as cm:
                     runpy.run_path(str(script_path), run_name="__main__")
         finally:
-            for k in ("harness", "run_adapter", "run_contract", "scripts"):
+            for k in ("harness", "run_adapter", "run_contract", "model_policy", "workflow_policy", "scripts"):
                 sys.modules.pop(k, None)
             sys.modules.update(saved_modules)
 
@@ -1076,8 +1605,10 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertEqual(stderr_buf.getvalue(), "")
         parsed = shlex.split(stdout_buf.getvalue().strip())
         self.assertEqual(parsed[0], "AGY_MODEL=gemini-4-argon-high")
-        self.assertEqual(parsed[1], sys.executable)
-        self.assertEqual(parsed[2], str(self.runner_script))
+        self.assertEqual(parsed[1], "WORKFLOW_WORKER=agy")
+        self.assertEqual(parsed[2], "WORKFLOW_CONTEXT=lean")
+        self.assertEqual(parsed[3], sys.executable)
+        self.assertEqual(parsed[4], str(self.runner_script))
 
 
 if __name__ == "__main__":

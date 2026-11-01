@@ -7,7 +7,7 @@
   ],
   "name": "Quantitative Engineering & Risk Profile",
   "domain": "quant",
-  "description": "Orchestration profile for financial math, PnL, funding, liquidation, backtesting, and risk; currently BLOCKED for live execution until a reviewer proven stronger than the selected worker model is available.",
+  "description": "Orchestration profile for financial math, PnL, funding, liquidation, backtesting, and risk; currently BLOCKED for live execution across agy and Devin worker selections until an approved reviewer proven stronger than the selected worker model is available (distinct worker/reviewer provider or model labels do not prove stronger review).",
   "extends": [],
   "work_kind": "quant",
   "runner_route": {
@@ -16,7 +16,7 @@
     "min_reviewers": 2,
     "max_reworks": 2,
     "execution_status": "blocked_requires_stronger_reviewer",
-    "unblock_requirement": "Provide and mechanically verify a reviewer model/tier proven stronger than the selected worker model in antigravity-sol-quant-runner, with explicit user approval to unblock in core/policy.json. Selecting claude-opus-5-5-high as the worker model does not by itself unblock quant."
+    "unblock_requirement": "Provide and mechanically verify a reviewer model/tier proven stronger than the selected worker model in antigravity-sol-quant-runner, with explicit user approval to unblock in core/policy.json. Selecting claude-opus-5-5-high as the worker model or pairing distinct worker/reviewer provider or model labels (including Devin swe-1-6-slow and agy claude-opus-5-5-high or gemini-4-argon-high) does not prove stronger review and does not by itself unblock quant."
   },
   "tools": [
     {

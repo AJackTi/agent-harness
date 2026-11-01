@@ -13,9 +13,10 @@ import sys
 from typing import Any, Sequence, TextIO
 
 try:
-    from scripts import model_policy
+    from scripts import model_policy, workflow_policy
 except ImportError:
     import model_policy  # type: ignore[no-redef]
+    import workflow_policy  # type: ignore[no-redef]
 
 SCHEMA_VERSION = "1.0.0"
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -41,12 +42,16 @@ IGNORED_DISCOVERY_DIRS = {
 }
 
 EXPECTED_PIPELINE_STAGES = [
-    "external_agy_worker",
+    "external_worker",
     "repo_native_mechanical_checks",
     "jev_typed_evidence_triage",
     "fresh_pinned_reviewers",
     "chatgpt_final_review",
 ]
+EXPECTED_REQUIRED_RUNNER_FLAGS = (
+    "--no-resume-worker",
+    "--context-mode",
+)
 EXPECTED_FAIL_CLOSED_CONDITIONS = {
     "missing_cli",
     "missing_model",
@@ -70,6 +75,10 @@ KNOWN_EXEC_FLAGS = {
 EXPECTED_REPORTING_FIELDS = {
     "verdict",
     "actual_model",
+    "worker_provider",
+    "worker_model",
+    "reviewer_model",
+    "context_mode",
     "files",
     "actual_check_exit_codes",
     "confidence_below_100_percent",
@@ -304,6 +313,7 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
         raise HarnessError(f"{em_ctx}: stale or unsupported override fields: {stale}.")
     try:
         model_policy.validate_model_policy(policy)
+        workflow_policy.validate_workflow_policy(policy)
     except ValueError as exc:
         raise HarnessError(f"{ctx}: {exc}") from exc
     if _require_nonempty_str(exec_model, "pinned_effort", em_ctx) != "high":
@@ -318,10 +328,11 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
     if _require_bool(exec_model, "resume_worker", em_ctx) is not False:
         raise HarnessError(f"{em_ctx}: resume_worker must be false.")
     runner_flags = _require_str_list(exec_model, "required_runner_flags", em_ctx)
-    if "--no-resume-worker" not in runner_flags:
-        raise HarnessError(
-            f"{em_ctx}: required_runner_flags must contain '--no-resume-worker'."
-        )
+    for req_flag in EXPECTED_REQUIRED_RUNNER_FLAGS:
+        if req_flag not in runner_flags:
+            raise HarnessError(
+                f"{em_ctx}: required_runner_flags must contain '{req_flag}'."
+            )
     if _require_bool(exec_model, "forbid_unsupported_models", em_ctx) is not True:
         raise HarnessError(f"{em_ctx}: forbid_unsupported_models must be true.")
     if _require_bool(exec_model, "forbid_effort_override", em_ctx) is not True:
@@ -409,14 +420,25 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
         raise HarnessError(f"{pl_ctx}: default_worker_timeout_seconds must be > 0.")
 
     reporting = _require_dict(pipeline, "reporting", pl_ctx)
-    rep_fields = set(_require_str_list(reporting, "required_fields", f"{pl_ctx}.reporting"))
+    rep_ctx = f"{pl_ctx}.reporting"
+    rep_fields = set(_require_str_list(reporting, "required_fields", rep_ctx))
     if not EXPECTED_REPORTING_FIELDS.issubset(rep_fields):
         raise HarnessError(
-            f"{pl_ctx}.reporting: missing required reporting fields: {sorted(EXPECTED_REPORTING_FIELDS - rep_fields)}."
+            f"{rep_ctx}: missing required reporting fields: {sorted(EXPECTED_REPORTING_FIELDS - rep_fields)}."
         )
-    max_conf = _require_int(reporting, "max_confidence_percent", f"{pl_ctx}.reporting")
+    if _require_bool(reporting, "separate_devin_and_agy_usage", rep_ctx) is not True:
+        raise HarnessError(
+            f"{rep_ctx}: separate_devin_and_agy_usage must be true."
+        )
+    for usage_key in ("devin_usage_totals_key", "agy_usage_totals_key"):
+        expected_usage_key = workflow_policy.DEVIN_WORKER_VALIDATION[usage_key]
+        if _require_nonempty_str(reporting, usage_key, rep_ctx) != expected_usage_key:
+            raise HarnessError(
+                f"{rep_ctx}: {usage_key} must be '{expected_usage_key}'."
+            )
+    max_conf = _require_int(reporting, "max_confidence_percent", rep_ctx)
     if max_conf <= 0 or max_conf >= 100:
-        raise HarnessError(f"{pl_ctx}.reporting: max_confidence_percent must be < 100.")
+        raise HarnessError(f"{rep_ctx}: max_confidence_percent must be < 100.")
 
     runners = _require_dict(policy, "runners", ctx)
     task_runner = _require_dict(runners, "task", f"{ctx}.runners")
@@ -436,10 +458,11 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
     task_flags = set(
         _require_str_list(task_runner, "supported_flags", f"{ctx}.runners.task")
     )
-    if "--no-resume-worker" not in task_flags:
-        raise HarnessError(
-            f"{ctx}.runners.task: supported_flags must contain '--no-resume-worker'."
-        )
+    for req_flag in EXPECTED_REQUIRED_RUNNER_FLAGS:
+        if req_flag not in task_flags:
+            raise HarnessError(
+                f"{ctx}.runners.task: supported_flags must contain '{req_flag}'."
+            )
     if _require_bool(task_runner, "execution_enabled", f"{ctx}.runners.task") is not True:
         raise HarnessError(f"{ctx}.runners.task: execution_enabled must be true.")
 
@@ -789,13 +812,24 @@ def _build_effective_profile(
     effective_route["max_reworks"] = effective_max_reworks
 
     exec_model = policy["execution_model"]
+    workflow_sel = exec_model["workflow_selection"]
     model_sel = exec_model["model_selection"]
     jev_info = policy["pipeline"]["jev"]
     core_invariants = {
         "mode": exec_model["mode"],
         "worker_cli": exec_model["worker_cli"],
+        "worker_cli_role": "agy_executable_and_default_worker",
+        "workflow_selection": json.loads(json.dumps(workflow_sel)),
+        "selected_worker_observed": False,
+        "selected_context_observed": False,
+        "agy_metadata_scope": exec_model["agy_metadata_scope"],
+        "worker_validation_applies_to": policy["worker_validation"]["applies_to"],
+        "devin_worker_validation": json.loads(
+            json.dumps(policy["devin_worker_validation"])
+        ),
         "model_selection": json.loads(json.dumps(model_sel)),
         "selected_model_observed": False,
+        "policy_configuration_is_observed_runtime_proof": False,
         "pinned_effort": exec_model["pinned_effort"],
         "permission_mode": exec_model["permission_mode"],
         "required_runner_flags": list(exec_model["required_runner_flags"]),
@@ -1672,6 +1706,7 @@ def _format_list_output(items: list[dict[str, Any]]) -> str:
 
 def _format_show_output(eff: dict[str, Any]) -> str:
     inv = eff["core_policy_invariants"]
+    ws = inv["workflow_selection"]
     ms = inv["model_selection"]
     parents = ", ".join(eff["extends"]) if eff["extends"] else "(none)"
     ancestors = ", ".join(eff["ancestors"]) if eff["ancestors"] else "(none)"
@@ -1688,7 +1723,13 @@ def _format_show_output(eff: dict[str, Any]) -> str:
         f"Runner: {eff['runner_route']['runner_id']} (status: {eff['runner_route']['execution_status']})",
         (
             "Core Policy (invariant, non-weakening): "
-            f"mode={inv['mode']}, cli={inv['worker_cli']}, "
+            f"mode={inv['mode']}, cli={inv['worker_cli']} (agy executable/default worker; "
+            f"worker selection via {ws['worker_selector_env_var']}={','.join(ws['allowed_workers'])}, "
+            f"default_worker_when_unset={ws['default_worker_when_unset']}, "
+            f"context via {ws['context_selector_env_var']}={','.join(ws['allowed_contexts'])}, "
+            f"default_context_when_unset={ws['default_context_when_unset']}; "
+            f"policy configuration only, not observed runtime proof), "
+            f"agy_scope={inv['agy_metadata_scope']}, "
             f"models={','.join(ms['allowed_models'])} (preferred={ms['preferred_model']}, "
             f"default_when_unset={ms['default_model_when_unset']}; policy only, not an observed selected model), "
             f"effort={inv['pinned_effort']}, "

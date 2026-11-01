@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "ajackti-agent-harness",
-  "description": "AJACKTI's personal multi-domain agent orchestration harness with an external-first agy policy and composable domain profiles.",
+  "description": "AJACKTI's personal multi-domain agent orchestration harness with external-first worker selection (WORKFLOW_WORKER=agy|devin, default agy; WORKFLOW_CONTEXT=lean|compact|full, default lean; agy always reviewer) and composable domain profiles.",
   "policy_path": "core/policy.json",
   "entrypoints": {
     "agents": "AGENTS.md",
@@ -20,7 +20,7 @@
       "name": "agy",
       "binary": "agy",
       "required_for": "execution",
-      "description": "External Antigravity CLI used for worker and fresh reviewers, pinned to the coordinator-selected model (claude-opus-5-5-high while available, otherwise verified gemini-4-argon-high; unset/empty AGY_MODEL defaults to gemini-4-argon-high) with --effort high."
+      "description": "External Antigravity CLI used as a worker option (WORKFLOW_WORKER=agy or unset/empty) and always as the fresh reviewer; execution_model.worker_cli is the legacy agy binary/default while execution_model.workflow_selection chooses the actual worker. Pinned for agy workers and all reviewers to the coordinator-selected AGY_MODEL (claude-opus-5-5-high while available, otherwise verified gemini-4-argon-high; unset/empty defaults to gemini-4-argon-high) with --effort high in request-review mode."
     },
     {
       "name": "jev-pool",

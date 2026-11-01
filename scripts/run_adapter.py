@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shlex
 import shutil
 import subprocess
@@ -33,12 +33,22 @@ try:
 except ImportError:
     import model_policy  # type: ignore[no-redef]
 
+try:
+    from scripts import workflow_policy
+except ImportError:
+    import workflow_policy  # type: ignore[no-redef]
+
 ContractError = run_contract.ContractError
 MAX_REWORKS_CEILING = int(model_policy.RETRY_POLICY["max_reworks_ceiling"])
 
 REQUIRED_TASK_RUNNER_ID = "antigravity-task-runner"
 REQUIRED_TASK_RUNNER_REL_PATH = "antigravity-task-runner/scripts/run_workflow.py"
 REQUIRED_TASK_RUNNER_GATE_NAME = "jev_review_gate.py"
+REQUIRED_TASK_RUNNER_DEVIN_WORKER_NAME = "devin_worker.py"
+REQUIRED_TASK_RUNNER_SUPPORT_NAMES = (
+    REQUIRED_TASK_RUNNER_DEVIN_WORKER_NAME,
+    REQUIRED_TASK_RUNNER_GATE_NAME,
+)
 MIN_REVIEW_GATE_REVIEWERS = 1
 MAX_REVIEW_GATE_REVIEWERS = 4
 REQUIRED_TASK_RUNNER_FLAGS = {
@@ -51,6 +61,7 @@ REQUIRED_TASK_RUNNER_FLAGS = {
     "--max-reworks",
     "--worker-timeout",
     "--no-resume-worker",
+    "--context-mode",
 }
 
 
@@ -70,6 +81,40 @@ def resolve_dispatch_model(raw_value: Any) -> str:
         return model_policy.resolve_selected_model(raw_value)
     except ValueError as exc:
         raise ContractError(f"invalid {model_policy.MODEL_ENV_VAR} selection: {exc}") from exc
+
+
+def resolve_dispatch_worker(raw_value: Any) -> str:
+    """Resolve the coordinator-selected WORKFLOW_WORKER value via the workflow policy resolver.
+
+    No quota lookup, auto-selection, or failover is performed; unsupported values BLOCK.
+    """
+    try:
+        return workflow_policy.resolve_workflow_worker(raw_value)
+    except ValueError as exc:
+        raise ContractError(f"invalid {workflow_policy.WORKER_ENV_VAR} selection: {exc}") from exc
+
+
+def resolve_dispatch_context(raw_value: Any) -> str:
+    """Resolve the coordinator-selected WORKFLOW_CONTEXT value via the workflow policy resolver.
+
+    Unsupported values BLOCK.
+    """
+    try:
+        return workflow_policy.resolve_workflow_context(raw_value)
+    except ValueError as exc:
+        raise ContractError(f"invalid {workflow_policy.CONTEXT_ENV_VAR} selection: {exc}") from exc
+
+
+def resolve_expected_worker_model(worker_provider: str, selected_agy_model: str) -> str:
+    """Return the configured worker model expectation for the selected worker provider.
+
+    This is a pre-dispatch configuration expectation only, not observed runtime proof.
+    """
+    if worker_provider == workflow_policy.DEVIN_WORKER:
+        return workflow_policy.DEVIN_MODEL
+    if worker_provider == workflow_policy.AGY_WORKER:
+        return selected_agy_model
+    raise ContractError(f"unsupported worker_provider: {worker_provider!r}")
 
 
 def resolve_max_reworks(value: Any, ceiling: int = MAX_REWORKS_CEILING) -> int:
@@ -248,14 +293,101 @@ def resolve_task_runner_script(skills_root: Path | str, policy: dict[str, Any]) 
     return candidate
 
 
+def resolve_devin_support_scripts(
+    skills_root: Path | str,
+    runner_script: Path | str | None = None,
+) -> dict[str, str]:
+    """Verify safe non-symlink presence and containment of devin_worker.py and jev_review_gate.py alongside the runner.
+
+    These are local filesystem presence/containment checks only, not proof of a successful
+    Devin generation, quota, or runtime security.
+    """
+    if not isinstance(skills_root, (str, Path)) or not str(skills_root).strip():
+        raise ContractError("invalid skills_root")
+    raw_sr_str = str(skills_root).strip()
+    if run_contract.CTRL_RE.search(raw_sr_str):
+        raise ContractError("invalid skills_root")
+    expanded_sr = Path(raw_sr_str).expanduser()
+    if ".." in expanded_sr.parts:
+        raise ContractError(f"unsafe skills_root path traversal: {raw_sr_str}")
+    if expanded_sr.is_symlink() or not expanded_sr.is_dir():
+        raise ContractError(
+            f"skills_root must be an existing non-symlink directory: {expanded_sr}"
+        )
+
+    try:
+        sr_real = expanded_sr.resolve(strict=True)
+    except OSError as exc:
+        raise ContractError(f"unable to resolve skills_root: {expanded_sr}") from exc
+
+    if runner_script is not None:
+        runner_path = Path(runner_script)
+        if runner_path.is_symlink() or not runner_path.is_file():
+            raise ContractError(
+                f"missing or unsafe task runner script under skills_root: {runner_path}"
+            )
+        try:
+            runner_real = runner_path.resolve(strict=True)
+            runner_rel = runner_real.relative_to(sr_real)
+        except (OSError, ValueError) as exc:
+            raise ContractError(
+                f"runner script escapes skills_root: {runner_path}"
+            ) from exc
+        runner_dir_rel = PurePosixPath(*runner_rel.parts[:-1])
+    else:
+        runner_dir_rel = PurePosixPath(REQUIRED_TASK_RUNNER_REL_PATH).parent
+        runner_real = sr_real / REQUIRED_TASK_RUNNER_REL_PATH
+
+    resolved_helpers: dict[str, str] = {}
+    for helper_name in REQUIRED_TASK_RUNNER_SUPPORT_NAMES:
+        rel_helper = str(runner_dir_rel / helper_name)
+        try:
+            candidate, present = harness._resolve_skill_script(
+                expanded_sr,
+                rel_helper,
+                f"devin_support_script.{helper_name}",
+            )
+        except Exception as exc:
+            raise ContractError(
+                f"unsafe Devin support script path ({helper_name}): {exc}"
+            ) from exc
+
+        if not present:
+            raise ContractError(
+                f"missing or unsafe Devin support script '{helper_name}' under skills_root: {candidate}"
+            )
+
+        try:
+            cand_real = candidate.resolve(strict=True)
+            cand_real.relative_to(sr_real)
+        except (OSError, ValueError) as exc:
+            raise ContractError(
+                f"Devin support script '{helper_name}' escapes skills_root: {candidate}"
+            ) from exc
+
+        if cand_real.parent != runner_real.parent:
+            raise ContractError(
+                f"Devin support script '{helper_name}' must reside alongside runner script: {candidate}"
+            )
+        resolved_helpers[helper_name] = str(candidate)
+
+    return resolved_helpers
+
+
 def check_real_run_prerequisites(
     skills_root: Path,
     policy: dict[str, Any],
     *,
     env_path: str | None = None,
     runner_script: Path | None = None,
+    worker_provider: str = workflow_policy.DEFAULT_WORKER,
 ) -> dict[str, str]:
-    """Verify agy and jev-pool executable availability matching the installed runner's actual lookup."""
+    """Verify agy, jev-pool, and (when Devin is selected) devin executable availability.
+
+    Executable presence is a local preflight check only and never proves quota or generation.
+    agy is always required because reviewers always run via agy.
+    """
+    resolved_worker = resolve_dispatch_worker(worker_provider)
     search_path = os.environ.get("PATH", "") if env_path is None else env_path
     agy_bin = str(policy["execution_model"]["worker_cli"])
     agy_which = shutil.which(agy_bin, path=search_path)
@@ -302,7 +434,22 @@ def check_real_run_prerequisites(
             f"(jev-calibrated-decisions, ~/.agents/skills/jev, PATH, ~/.local/bin)"
         )
 
-    return {"agy": agy_resolved, "jev-pool": jev_resolved}
+    prerequisites: dict[str, str] = {"agy": agy_resolved, "jev-pool": jev_resolved}
+    if resolved_worker == workflow_policy.DEVIN_WORKER:
+        devin_bin = workflow_policy.DEVIN_WORKER
+        devin_which = shutil.which(devin_bin, path=search_path)
+        devin_candidates: list[Path] = []
+        if devin_which:
+            devin_candidates.append(Path(devin_which))
+        devin_candidates.append(Path.home() / ".local" / "bin" / devin_bin)
+        devin_resolved = _first_executable_candidate(devin_candidates)
+        if not devin_resolved:
+            raise ContractError(
+                f"missing required executable Devin worker CLI '{devin_bin}' on PATH or ~/.local/bin/{devin_bin}"
+            )
+        prerequisites["devin"] = devin_resolved
+
+    return prerequisites
 
 
 def build_runner_argv(
@@ -312,6 +459,7 @@ def build_runner_argv(
     min_reviewers: int,
     max_reworks: int,
     worker_timeout: int,
+    context_mode: str = workflow_policy.DEFAULT_CONTEXT,
     python_executable: str | None = None,
 ) -> list[str]:
     """Build the exact argv list for antigravity-task-runner/scripts/run_workflow.py."""
@@ -326,6 +474,13 @@ def build_runner_argv(
             f"({MIN_REVIEW_GATE_REVIEWERS}..{MAX_REVIEW_GATE_REVIEWERS})"
         )
     resolve_max_reworks(max_reworks)
+    if (
+        not isinstance(context_mode, str)
+        or context_mode not in workflow_policy.ALLOWED_CONTEXTS
+    ):
+        raise ContractError(
+            f"invalid context_mode: {context_mode!r} (must be one of {workflow_policy.ALLOWED_CONTEXTS})"
+        )
     return [
         python_executable or sys.executable,
         str(runner_script),
@@ -349,6 +504,8 @@ def build_runner_argv(
         str(max_reworks),
         "--worker-timeout",
         str(worker_timeout),
+        "--context-mode",
+        str(context_mode),
         "--no-resume-worker",
     ]
 
@@ -370,9 +527,24 @@ def prepare_run(
     env_path: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Validate harness policy, profiles, run contract, runner path, and (for real runs) prerequisites."""
-    # Resolve the coordinator-selected model first so invalid selections BLOCK before any other work.
+    """Validate harness policy, profiles, run contract, runner path, and (for real runs) prerequisites.
+
+    Plan model and provider fields (selected_model, reviewer_model, worker_provider,
+    expected_worker_model, worker_model, context_mode) record configured pre-dispatch
+    expectations only, not observed runtime proof.
+    """
+    # Resolve coordinator-selected AGY_MODEL, WORKFLOW_WORKER, and WORKFLOW_CONTEXT first
+    # so invalid selections BLOCK before any harness load, prerequisite check, or subprocess.
     selected_model = resolve_dispatch_model(os.environ.get(model_policy.MODEL_ENV_VAR))
+    worker_provider = resolve_dispatch_worker(
+        os.environ.get(workflow_policy.WORKER_ENV_VAR)
+    )
+    context_mode = resolve_dispatch_context(
+        os.environ.get(workflow_policy.CONTEXT_ENV_VAR)
+    )
+    expected_worker_model = resolve_expected_worker_model(
+        worker_provider, selected_model
+    )
 
     effective_repo_root = (
         Path(repo_root) if repo_root is not None else harness.DEFAULT_REPO_ROOT
@@ -470,6 +642,7 @@ def prepare_run(
         core_min_reviewers != 1
         or policy_max_reworks != MAX_REWORKS_CEILING
         or "--no-resume-worker" not in policy["execution_model"]["required_runner_flags"]
+        or "--context-mode" not in policy["execution_model"]["required_runner_flags"]
     ):
         raise ContractError("task policy invariant violation")
     effective_max_reworks = resolve_max_reworks(max_reworks, policy_max_reworks)
@@ -487,6 +660,11 @@ def prepare_run(
         else Path.home() / ".agents" / "skills"
     )
     runner_script = resolve_task_runner_script(raw_skills_root, policy)
+    devin_support_scripts = (
+        resolve_devin_support_scripts(raw_skills_root, runner_script)
+        if worker_provider == workflow_policy.DEVIN_WORKER
+        else {}
+    )
     effective_skills_root = Path(str(raw_skills_root).strip()).expanduser()
 
     prerequisites = (
@@ -497,6 +675,7 @@ def prepare_run(
             policy,
             env_path=env_path,
             runner_script=runner_script,
+            worker_provider=worker_provider,
         )
     )
 
@@ -506,20 +685,31 @@ def prepare_run(
         min_reviewers=min_reviewers,
         max_reworks=effective_max_reworks,
         worker_timeout=effective_timeout,
+        context_mode=context_mode,
     )
-    # Copy-pastable POSIX command with an explicit model pin; argv itself stays unchanged.
-    model_assignment = f"{model_policy.MODEL_ENV_VAR}={selected_model}"
+    # Copy-pastable POSIX command with explicit AGY_MODEL, WORKFLOW_WORKER, and WORKFLOW_CONTEXT pins.
+    env_assignments = [
+        f"{model_policy.MODEL_ENV_VAR}={selected_model}",
+        f"{workflow_policy.WORKER_ENV_VAR}={worker_provider}",
+        f"{workflow_policy.CONTEXT_ENV_VAR}={context_mode}",
+    ]
     return {
         "contract": contract,
         "runner_script": str(runner_script),
         "argv": argv,
-        "command": f"{shlex.quote(model_assignment)} {shlex.join(argv)}",
+        "command": f"{shlex.join(env_assignments)} {shlex.join(argv)}",
         "selected_model": selected_model,
+        "reviewer_model": selected_model,
+        "worker_provider": worker_provider,
+        "context_mode": context_mode,
+        "expected_worker_model": expected_worker_model,
+        "worker_model": expected_worker_model,
         "min_reviewers": min_reviewers,
         "max_reworks": effective_max_reworks,
         "worker_timeout": effective_timeout,
         "dry_run": bool(dry_run),
         "prerequisites": prerequisites,
+        "devin_support_scripts": devin_support_scripts,
     }
 
 
@@ -566,11 +756,14 @@ def execute_run(
             print(plan["command"], file=out)
             return 0
 
-        # Child gets a copy of the environment with AGY_MODEL pinned; os.environ is never mutated.
+        # Child gets a copy of the environment with AGY_MODEL, WORKFLOW_WORKER, and WORKFLOW_CONTEXT
+        # pinned explicitly; os.environ is never mutated.
         child_env: dict[str, str] = os.environ.copy()
         if env_path is not None:
             child_env["PATH"] = str(env_path)
         child_env[model_policy.MODEL_ENV_VAR] = plan["selected_model"]
+        child_env[workflow_policy.WORKER_ENV_VAR] = plan["worker_provider"]
+        child_env[workflow_policy.CONTEXT_ENV_VAR] = plan["context_mode"]
 
         try:
             completed = subprocess.run(

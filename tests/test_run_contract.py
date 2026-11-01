@@ -1,4 +1,4 @@
-"""Focused Stage B1 tests for pure run-contract validation."""
+"""Focused Stage B1 unit tests for pure run-contract validation."""
 
 import json, os, subprocess, tempfile, unittest
 from pathlib import Path
@@ -142,3 +142,91 @@ class RunContractTests(unittest.TestCase):
     self.pkt.write_text(f"TASK: M{Q}", encoding="utf-8")
     enabled = pol(lambda p: p["runners"]["quant"].__setitem__("execution_enabled", True))
     self.assertIn("stronger reviewer", self._bad(policy=enabled, work_kind="quant", profile_ids=["quant"]))
+
+  def test_workflow_context_devin_and_agy_scope_validated_without_dispatch(self) -> None:
+    def pol(mutate) -> dict:
+      p = json.loads(json.dumps(POLICY))
+      mutate(p)
+      return p
+
+    em, wv, dv, pl = "execution_model", "worker_validation", "devin_worker_validation", "pipeline"
+    ws = "workflow_selection"
+    with mock.patch.object(subprocess, "run", side_effect=AssertionError("ran")):
+      self.assertEqual(
+        self._run(
+          policy=pol(
+            lambda p: (
+              p[em][ws]["allowed_workers"].reverse(),
+              p[em][ws]["allowed_contexts"].reverse(),
+              p[dv]["lean_allowed_tool_definitions"].reverse(),
+            )
+          )
+        )["status"],
+        "VALIDATED",
+      )
+
+      mutations = (
+        lambda p: p[em].pop(ws),
+        lambda p: p.pop(dv),
+        lambda p: p[em].pop("agy_metadata_scope"),
+        lambda p: p[em].__setitem__("agy_metadata_scope", "all_workers"),
+        lambda p: p[wv].pop("applies_to"),
+        lambda p: p[wv].__setitem__("applies_to", "all_workers"),
+        lambda p: p[em][ws]["allowed_workers"].append("opencode"),
+        lambda p: p[em][ws].__setitem__("default_worker_when_unset", "devin"),
+        lambda p: p[em][ws].__setitem__("reviewer_worker", "devin"),
+        lambda p: p[em][ws]["allowed_contexts"].append("raw"),
+        lambda p: p[em][ws].__setitem__("allowed_contexts", ["compact", "full"]),
+        lambda p: p[em][ws].__setitem__("default_context_when_unset", "compact"),
+        lambda p: p[em][ws].__setitem__("default_context_when_unset", "full"),
+        lambda p: p[em][ws].__setitem__("compact_preserves_verbatim_contract", False),
+        lambda p: p[em][ws].__setitem__("compact_preserves_full_scoped_source", False),
+        lambda p: p[em][ws].__setitem__("lean_uses_compact_prompt", False),
+        lambda p: p[em][ws].__setitem__("lean_preserves_verbatim_contract", False),
+        lambda p: p[em][ws].__setitem__("lean_preserves_full_scoped_source", False),
+        lambda p: p[em][ws].__setitem__("runtime_context_and_proof_owner", "harness_adapter"),
+        lambda p: p[em][ws].__setitem__("shares_task_retry_ledger", False),
+        lambda p: p[em][ws].__setitem__("reset_retry_ledger_on_worker_change", True),
+        lambda p: p[em][ws].__setitem__("reset_retry_ledger_on_context_change", True),
+        lambda p: p[dv].__setitem__("pinned_model", "swe-1-5"),
+        lambda p: p[dv].__setitem__("trajectory_schema_version", "ATIF-v1.6"),
+        lambda p: p[dv].__setitem__("cli_permission_mode", "request-review"),
+        lambda p: p[dv].__setitem__("proof_permission_mode", "request-review"),
+        lambda p: p[dv].__setitem__("forbid_request_review_permission_claim", False),
+        lambda p: p[dv].__setitem__("claim_effort_high", True),
+        lambda p: p[dv].__setitem__("permission_config", "allow_all"),
+        lambda p: p[dv].__setitem__("pre_tool_use_exit_code", 0),
+        lambda p: p[dv].__setitem__("require_isolated_cwd", False),
+        lambda p: p[dv].__setitem__("max_tool_calls", 1),
+        lambda p: p[dv].__setitem__("max_observations", 1),
+        lambda p: p[dv].__setitem__("lean_tool_schema_validation_scope", "all_workers"),
+        lambda p: p[dv].__setitem__("claim_lean_tool_schema_checks_for_agy_or_non_lean", True),
+        lambda p: p[dv].__setitem__("lean_require_per_session_disabled_tools", False),
+        lambda p: p[dv].__setitem__("lean_tool_definitions_path", "tool_definitions"),
+        lambda p: p[dv].__setitem__("lean_allowed_tool_definitions", ["mcp_call_tool", "skill"]),
+        lambda p: p[dv]["lean_allowed_tool_definitions"].append("bash"),
+        lambda p: p[dv]["lean_allowed_tool_definitions"].append("skill"),
+        lambda p: p[dv].__setitem__("lean_tool_definitions_rule", "any_subset"),
+        lambda p: p[dv].__setitem__("lean_block_invalid_tool_definitions_before_apply", False),
+        lambda p: p[dv].__setitem__("schema_hiding_authorizes_tools", True),
+        lambda p: p[dv].__setitem__("lean_remaining_tools_denied_by_config_and_pre_tool_use_exit_2", False),
+        lambda p: p[dv].__setitem__("apply_handoff_only_after_proof_validation", False),
+        lambda p: p[dv].__setitem__("require_precondition_hashes", False),
+        lambda p: p[dv].__setitem__("require_atomic_rollback", False),
+        lambda p: p[dv].__setitem__("allow_deletions", True),
+        lambda p: p[dv].__setitem__("allow_symlinks", True),
+        lambda p: p[dv].__setitem__("execute_returned_commands", True),
+        lambda p: p[dv].__setitem__("separate_usage_totals_from_agy", False),
+        lambda p: p[em]["required_runner_flags"].remove("--context-mode"),
+        lambda p: p["runners"]["task"]["supported_flags"].remove("--context-mode"),
+        lambda p: p[pl]["ordered_stages"].__setitem__(0, "external_agy_worker"),
+        lambda p: p[pl]["reporting"]["required_fields"].remove("worker_provider"),
+        lambda p: p[pl]["reporting"]["required_fields"].remove("worker_model"),
+        lambda p: p[pl]["reporting"]["required_fields"].remove("reviewer_model"),
+        lambda p: p[pl]["reporting"]["required_fields"].remove("context_mode"),
+        lambda p: p[pl]["reporting"].__setitem__("separate_devin_and_agy_usage", False),
+        lambda p: p[pl]["reporting"].__setitem__("devin_usage_totals_key", "usage_totals.gemini"),
+      )
+      for idx, mutate in enumerate(mutations):
+        with self.subTest(mutation=idx):
+          self._bad(policy=pol(mutate))

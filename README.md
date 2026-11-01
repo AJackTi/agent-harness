@@ -97,11 +97,14 @@ agent-harness/
 │   ├── harness.py
 │   ├── model_policy.py
 │   ├── run_adapter.py
-│   └── run_contract.py
+│   ├── run_contract.py
+│   └── workflow_policy.py
 └── tests/
     ├── test_harness.py
+    ├── test_model_policy.py
     ├── test_run_adapter.py
-    └── test_run_contract.py
+    ├── test_run_contract.py
+    └── test_workflow_policy.py
 ```
 
 ## 3. Execution Workflow Examples (`run`)
@@ -118,10 +121,10 @@ The [scripts/harness.py](scripts/harness.py) CLI supports the `list`, `show`, `d
 - `--work-kind {task,quant}` (required): execution seam type (`task` or `quant`).
 - `--id TASK_ID` (optional): valid task identifier (defaults to the `stem` of the packet file).
 - `--worker-timeout SECONDS` (optional): positive integer worker timeout in seconds (defaults to `1800`).
-- `--max-reworks N` (optional): integer `0..2` (defaults to `2`, the policy ceiling) forwarded to the runner. Pass the reduced **remaining** budget of the coordinator-owned task-wide retry ledger (at most `2` extra worker executions per task, shared across internal reworks and cross-run/model restarts, never reset). The flag only validates and forwards the value; it does not compute or enforce the ledger and does not authorize a restart.
-- `AGY_MODEL` (environment): the coordinator-selected model, exactly `claude-opus-5-5-high` (preferred while available) or verified `gemini-4-argon-high`; unset or empty defaults to `gemini-4-argon-high` for compatibility, and any other value is `BLOCKED`. The child runner receives the resolved `AGY_MODEL`; the harness performs no quota fetching, model selection, or failover.
+- `--max-reworks N` (optional): integer `0..2` (defaults to `2`, the policy ceiling) forwarded to the runner. Pass the reduced **remaining** budget of the coordinator-owned task-wide retry ledger (at most `2` extra worker executions per task, shared across internal reworks and every cross-run/model/worker/context restart, `shares_task_retry_ledger: true`, never reset). The flag only validates and forwards the value; it does not compute or enforce the ledger and does not authorize a restart.
+- `AGY_MODEL`, `WORKFLOW_WORKER` & `WORKFLOW_CONTEXT` (environment, validated by [scripts/model_policy.py](scripts/model_policy.py) and [scripts/workflow_policy.py](scripts/workflow_policy.py)): `AGY_MODEL` is `claude-opus-5-5-high` (preferred while quota available) or verified `gemini-4-argon-high` (unset/empty compatibility default), used for all `agy` reviewers (`reviewer_worker: "agy"`) and `agy` workers (`agy_workers_and_all_reviewers`). `WORKFLOW_WORKER=agy|devin` (unset/empty `agy`; `execution_model.worker_cli` is the legacy `"agy"` binary/default while `execution_model.workflow_selection` chooses the worker) and `WORKFLOW_CONTEXT=lean|compact|full` (unset/empty `lean`, the installed runner candidate default; `compact`/`full` retained; forwarded internally as `--context-mode <lean|compact|full>` to `run_workflow.py`). Exact match only; invalid values `BLOCK` before external calls. `compact`/`lean` trim `prompt_boilerplate` only, preserving the verbatim contract and full scoped source. The child runner receives a copied env with all three pinned; the harness performs no quota fetching, runtime polling, account/key rotation, or automatic failover.
 - `--skills-root PATH` (optional): real (non-symlink) root directory containing skills (defaults to `~/.agents/skills`).
-- `--dry-run` (optional): runs completely offline (does not check `agy`/`jev-pool` on `PATH` and does not spawn external processes), **but still requires** a safe runner script `antigravity-task-runner/scripts/run_workflow.py` under `--skills-root` along with valid `--workspace`, `--packet`, `--scope`, and `--output-dir` arguments.
+- `--dry-run` (optional): runs completely offline (no `PATH` or `~/.local/bin` executable probes and no subprocesses), **but still requires** a safe non-symlink `antigravity-task-runner/scripts/run_workflow.py` under `--skills-root` (plus safe non-symlink `devin_worker.py` and `jev_review_gate.py` alongside it when `WORKFLOW_WORKER=devin`) and valid `--workspace`, `--packet`, `--scope`, and `--output-dir`. Live `run` always requires executable `agy` (for reviewers and `agy` workers) and `jev-pool`, and conditionally requires executable `devin` when `WORKFLOW_WORKER=devin`. Existing `doctor` is baseline `agy` tooling only and not proof of Devin readiness/availability; its `task_execution_ready` does not authorize `devin`.
 
 ### Example 1: Dry-Run for a General Engineering Task (`task`)
 
@@ -138,15 +141,16 @@ python3 scripts/harness.py run \
   --dry-run
 ```
 
-The command above validates the packet/workspace/scope/output-dir contract, verifies the safe existence of the runner script under `--skills-root`, performs a conservative quantitative keyword screen on the `TASK:` header line, and prints the `shlex.join` command, prefixed with `AGY_MODEL=<resolved model>`, invoking `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` with `--min-reviewers 1 --max-reworks 2 --no-resume-worker` (`2` is the default when `--max-reworks` is omitted):
+The command above validates the packet/workspace/scope/output-dir contract, verifies the safe existence of the runner script under `--skills-root`, performs a conservative quantitative keyword screen on the `TASK:` header line, and prints the `shlex.join` command prefixed with `AGY_MODEL=gemini-4-argon-high WORKFLOW_WORKER=agy WORKFLOW_CONTEXT=lean`, invoking `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` with `--min-reviewers 1 --max-reworks 2 --worker-timeout 1800 --context-mode lean --no-resume-worker` (`2` is the default when `--max-reworks` is omitted):
 - **Minimum reviewer count (`--min-reviewers`)**: computed as the **maximum (`max`)** across the core policy (`core/policy.json`) and all selected profiles along with their inheritance chain (`extends` / `lineage`). The current configuration defaults to `1`; the installed review gate (`jev_review_gate.py`) supports the range `1..4` (values outside `1..4` fail closed with `BLOCKED`).
-- **The `--no-resume-worker` flag**: passed to the upstream workflow (`run_workflow.py`), **not** directly to the `agy` CLI or reviewer sessions. Both workers and fresh reviewers are pinned to the same selected `AGY_MODEL` with `--effort high` under `request-review` mode; a fresh context on the same selected model is **independent**, **not stronger**.
+- **The `--no-resume-worker` and `--context-mode` flags**: passed to the upstream workflow (`run_workflow.py`), **not** directly to the `agy` CLI or reviewer sessions (`agy` documents `--conversation` rather than `--resume`). All fresh reviewers remain `agy` on the selected `AGY_MODEL` with `--effort high` under `request-review` mode, and only `agy` workers share those metadata requirements (`agy_workers_and_all_reviewers`); a fresh context on the same selected model is **independent**, **not stronger**.
 - **Why task scope (`--scope`) must be kept small**: in addition to the `<= 8000` character limit on the input task packet file, the external installed review gate caps the **focused diff at `12000` characters** and the **internal review packet at `20000` characters**. Split work into small, focused tasks; never loosen review gates and never compress or minify source code just to fit within character limits.
 
-### Example 2: Explicit Model Selection and Remaining Rework Budget (`task`)
+### Example 2: Explicit `agy` and Opt-In Devin with `WORKFLOW_CONTEXT` and Remaining Rework Budget (`task`)
 
 ```bash
-AGY_MODEL=claude-opus-5-5-high python3 scripts/harness.py run \
+# Explicit agy worker with Opus and compact context (1 rework remaining)
+AGY_MODEL=claude-opus-5-5-high WORKFLOW_WORKER=agy WORKFLOW_CONTEXT=compact python3 scripts/harness.py run \
   --workspace /tmp/example-consumer-repo \
   --packet /tmp/example-task.md \
   --scope src/service.ts \
@@ -156,9 +160,21 @@ AGY_MODEL=claude-opus-5-5-high python3 scripts/harness.py run \
   --work-kind task \
   --max-reworks 1 \
   --dry-run
+
+# Opt-in Devin worker (swe-1-6-slow) with lean context and Opus agy reviewers
+AGY_MODEL=claude-opus-5-5-high WORKFLOW_WORKER=devin WORKFLOW_CONTEXT=lean python3 scripts/harness.py run \
+  --workspace /tmp/example-consumer-repo \
+  --packet /tmp/example-task.md \
+  --scope src/service.ts \
+  --verify-cmd "npm test" \
+  --output-dir /tmp/example-proof-out-devin \
+  --profile backend/typescript \
+  --work-kind task \
+  --max-reworks 1 \
+  --dry-run
 ```
 
-Here the coordinator has already refreshed quota/auth/availability (`agy --print /usage` for backend quota; a zero-tool probe proves availability only) and selected Opus. `--max-reworks 1` is the coordinator's own ledger arithmetic (e.g., a restart after a quota block reserves one of the two extra executions). The harness does not compute the ledger or authorize the restart. Model mismatch and permission denial are terminal; only quota/auth/availability blocks permit reassessing the model, never via account, key, or billing changes. Proof covers the aggregate changes of all executions against the original snapshot.
+Before each task, the coordinator refreshes native quota/auth/availability (`agy --print /usage` records actual query usage; avoid redundant probes; a zero-tool probe proves `availability_only`) and selects `devin` **only** from actual recent successful generation (`devin_requires_recent_successful_generation: true`), never claimed numeric quota (`claim_numeric_devin_quota: false`; `opencode` is `probe_only`). Devin (`swe-1-6-slow`) is a tool-free generator in an isolated cwd with `deny_all` + unconditional `PreToolUse` exit `2`, CLI `auto` / `ATIF-v1.7` `"Normal"` proof mode, `0` tool calls/observations, fresh sessions, no `high`/`request-review` or fabricated `agy` proof, and `strict_json_files` (`exact_scoped_replacements_only`, exact response/stdout match allowing at most `1` leading `ESC[?2004l` and `1` trailing newline) validated before mechanical apply with precondition hashes and atomic rollback (no deletions, symlinks, path aliases, or command execution). For Devin `lean` (`devin_lean_only`), `lean` uses the `compact` prompt plus per-session `disabled_tools` and requires ATIF `agent.tool_definitions` to be a `well_formed_unique_name_nonempty_subset` of `mcp_call_tool`, `mcp_list_servers`, `mcp_list_tools`, `mcp_read_resource`, `skill` (missing/extra/duplicate/malformed definitions `BLOCK` before apply; `schema_hiding_authorizes_tools: false`—all five remain denied by config and `PreToolUse` exit `2`; not claimed for `agy` or non-`lean`). Optional RTK filtering applies only to passing supported `pytest` logs with equal raw/filtered pass counts (raw exits/counts and full reviewer evidence remain authoritative; `unittest` is unchanged). `--max-reworks 1` reflects the shared task-wide retry ledger (`2` extra executions across internal reworks and every cross-run/model/worker/context restart, never reset); mismatch and permission denial are terminal, only quota/auth/availability blocks permit reassessment, original snapshot and aggregate review (disclosing partial edits) are required, and usage is tracked separately in `usage_totals.devin` vs `usage_totals.gemini`.
 
 ### Example 3: Dashboard/Data Task Involving PnL/Funding/Risk (`quant` — Currently `BLOCKED`)
 
@@ -182,4 +198,4 @@ This command fails closed with a `BLOCKED` status (non-zero exit code) and repor
 2. **No Bundled Runners or External Binaries**: This repository provides only the orchestration framework and thin adapter layer. Even `--dry-run` (offline) requires the `antigravity-task-runner/scripts/run_workflow.py` script to exist safely under `--skills-root`; live execution (without `--dry-run`) additionally requires executable `agy` and `jev-pool` (`jev-1.13.0`) binaries on the host workstation.
 3. **`quant` Execution Is Actively `BLOCKED`**: The repository owner requires a **stronger reviewer** for financial mathematics, PnL, funding, liquidation, and risk logic. Keyword scanning on the `TASK:` header line in [scripts/run_contract.py](scripts/run_contract.py) is only a supplemental conservative heuristic; **semantic seam classification remains the responsibility of the coordinator**. Unlocking `quant` execution in the future requires implementing and integrating an owner-approved dedicated `quant` execution path backed by stronger-reviewer proof and tests—**not merely flipping the `execution_enabled` flag** in [core/policy.json](core/policy.json).
 4. **No Sample Application Code or Trading Algorithms**: This repository provides general-purpose engineering harness tooling only and contains no financial formulas, backtest results, or application starter code.
-5. **Coordinator-Owned Model Selection and Retry Ledger**: The harness fetches no quota, selects no model, performs no failover, and does not enforce the task-wide retry ledger; [scripts/model_policy.py](scripts/model_policy.py) only resolves `AGY_MODEL` and validates the declarative policy. A fresh reviewer on the same selected model is independent, not stronger, so `quant` stays `BLOCKED` regardless of the selected model.
+5. **Coordinator-Owned Selection, Retry Ledger, Doctor Scope & Offline Test Suite**: The harness fetches no quota, polls no runtime quota, selects no worker/model/context automatically, performs no failover or key rotation, and does not enforce the task-wide retry ledger; [scripts/model_policy.py](scripts/model_policy.py) and [scripts/workflow_policy.py](scripts/workflow_policy.py) only resolve `AGY_MODEL`, `WORKFLOW_WORKER`, and `WORKFLOW_CONTEXT` and validate the declarative policy while `upstream_runner` owns runtime context/proof enforcement. Opt-in `WORKFLOW_WORKER=devin` requires safe `devin_worker.py` and `jev_review_gate.py` alongside `run_workflow.py` (plus executable `devin` in live runs, while `agy` remains required for reviewers); existing `doctor` is baseline `agy` tooling only and its `task_execution_ready` does not prove Devin readiness/availability or authorize `devin`. Fresh reviewers and distinct worker/reviewer model names (`swe-1-6-slow`, `claude-opus-5-5-high`, `gemini-4-argon-high`) are independent, not stronger, so `quant` stays `BLOCKED`. **No live Devin generation or benchmarking was performed or validated by this repository's offline test suite**; do not claim runtime availability, measured token savings, or globally proven security.

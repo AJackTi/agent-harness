@@ -10,18 +10,19 @@
 - **Profiles**: `<UNRESOLVED:PROFILE_IDS>`
 - **Confidence (`< 100%`)**: `<UNRESOLVED:CONFIDENCE_PERCENT_BELOW_100>`
 
-## 2. External `agy` Execution Record & Model Pinning
+## 2. External Worker & Reviewer Execution Record (`WORKFLOW_WORKER`, `WORKFLOW_CONTEXT`, `AGY_MODEL`)
 
-- **Selected Model (`AGY_MODEL`, actual)**: `<UNRESOLVED:SELECTED_MODEL_claude-opus-5-5-high_OR_gemini-4-argon-high>`
+- **Selected Model (`actual_model` / `AGY_MODEL`, actual)**: `<UNRESOLVED:SELECTED_MODEL_claude-opus-5-5-high_OR_gemini-4-argon-high>`
+- **Worker Provider & Model (`worker_provider` / `WORKFLOW_WORKER`: `agy` | `devin`; `worker_model`: `init.model` or `swe-1-6-slow`)**: `<UNRESOLVED:WORKER_PROVIDER_AND_MODEL>`
+- **Reviewer Worker & Model (`reviewer_worker: "agy"`, `reviewer_model` / `AGY_MODEL`)**: `<UNRESOLVED:ACTUAL_AGY_REVIEWER_MODEL>`
+- **Context Mode (`context_mode` / `WORKFLOW_CONTEXT` / `--context-mode`: `lean` | `compact` | `full`)**: `<UNRESOLVED:CONTEXT_MODE_lean_OR_compact_OR_full>`
 - **Quota Preflight (`agy --print /usage`, actual reported usage)**: `<UNRESOLVED:USAGE_QUERY_EVIDENCE>`
-- **Auth/Availability Probe (zero-tool probe proves availability only)**: `<UNRESOLVED:PROBE_EVIDENCE>`
-- **Worker Model (`init.model`)**: `<UNRESOLVED:MUST_EQUAL_SELECTED_MODEL>`
-- **Worker Effort (`init.effort` / `--effort high` + `-high` slug)**: `<UNRESOLVED:EFFORT_EVIDENCE>`
-- **Permission Mode (explicit `init.permission_mode`)**: `<UNRESOLVED:MUST_EQUAL_request-review>`
-- **No-Resume Enforcement**: `--no-resume-worker`
-- **Worker Exit Code**: `<UNRESOLVED:ACTUAL_WORKER_EXIT_CODE>`
-- **Result Status (`result.status`)**: `<UNRESOLVED:MUST_EQUAL_SUCCESS>`
-- **Permission Denial Check**: `<UNRESOLVED:NO_DENIAL_VERIFIED>`
+- **Auth/Availability Probe (`availability_only`; `opencode` `probe_only`; Devin from recent successful generation only, never numeric quota)**: `<UNRESOLVED:PROBE_AND_DEVIN_SELECTION_EVIDENCE>`
+- **Runner Flags Forwarded**: `--no-resume-worker --context-mode <UNRESOLVED:FORWARDED_CONTEXT_MODE>`
+- **`agy` Worker/Reviewers Proof (`agy_workers_and_all_reviewers`: `init.model == AGY_MODEL` when worker is `agy`, `init.effort == "high"` or `--effort high` + `-high` slug, explicit `init.permission_mode == "request-review"`, `result.status == "SUCCESS"`, nonempty response)**: `<UNRESOLVED:AGY_METADATA_PROOF>`
+- **Devin Worker Proof (`devin_worker_validation` when `devin`, else `N/A`: `swe-1-6-slow`, `ATIF-v1.7`, CLI `auto`/proof `Normal`, no `high`/`request-review` claim, isolated cwd, `deny_all` + `PreToolUse` exit `2`, `0` tool calls/observations, fresh session; `devin_lean_only` per-session `disabled_tools` + `agent.tool_definitions` `well_formed_unique_name_nonempty_subset` of `mcp_call_tool`, `mcp_list_servers`, `mcp_list_tools`, `mcp_read_resource`, `skill` blocking invalid before apply, `schema_hiding_authorizes_tools: false`; `strict_json_files` `exact_scoped_replacements_only`, exact response/stdout match, precondition hashes, atomic rollback)**: `<UNRESOLVED:DEVIN_PROOF_OR_NA>`
+- **Worker Exit Code (`0` required) & Permission Denial Check**: `<UNRESOLVED:WORKER_EXIT_AND_NO_DENIAL_VERIFIED>`
+- **Separated Usage Totals (`usage_totals.devin` vs `usage_totals.gemini`)**: `usage_totals.devin=<UNRESOLVED:USAGE_TOTALS_DEVIN>`, `usage_totals.gemini=<UNRESOLVED:USAGE_TOTALS_GEMINI>`
 
 ## 3. Files & Mechanical Checks
 
@@ -38,8 +39,8 @@
 - **Fresh Pinned Reviewers (same selected model, `--effort high`; independent, not stronger)**:
   - Reviewer #1 (independent fresh context): `<UNRESOLVED:REVIEWER_1_VERDICT_AND_EXIT_CODE>`
   - Reviewer #2 (required for `quant`, with stronger-reviewer evidence): `<UNRESOLVED:REVIEWER_2_OR_NA>`
-- **Task-Wide Execution Ledger (max `2` extra worker executions across reworks and restarts; never reset)**:
-  - Executions (model, reason, outcome): `<UNRESOLVED:EXECUTION_LEDGER_ENTRIES>`
+- **Task-Wide Execution Ledger (max `2` extra worker executions across reworks and every cross-run/model/worker/context restart; never reset)**:
+  - Executions (worker, model, context, reason, outcome): `<UNRESOLVED:EXECUTION_LEDGER_ENTRIES>`
   - Extra executions consumed / remaining: `<UNRESOLVED:EXTRA_EXECUTIONS_CONSUMED_AND_REMAINING>`
   - `--max-reworks` passed per run (`0..2`): `<UNRESOLVED:MAX_REWORKS_PER_RUN>`
   - Original snapshot and aggregate diff review (partial edits disclosed): `<UNRESOLVED:SNAPSHOT_AND_AGGREGATE_REVIEW>`

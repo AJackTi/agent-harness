@@ -140,12 +140,47 @@ class RealRepositoryTests(unittest.TestCase):
 
         inv = dash["core_policy_invariants"]
         self.assertNotIn("pinned_model", inv)
+        self.assertEqual(inv["worker_cli"], "agy")
+        self.assertEqual(inv["worker_cli_role"], "agy_executable_and_default_worker")
+        self.assertEqual(inv["workflow_selection"]["allowed_workers"], ["agy", "devin"])
+        self.assertEqual(inv["workflow_selection"]["default_worker_when_unset"], "agy")
+        self.assertEqual(inv["workflow_selection"]["allowed_contexts"], ["lean", "compact", "full"])
+        self.assertEqual(inv["workflow_selection"]["default_context_when_unset"], "lean")
+        self.assertIs(inv["workflow_selection"]["lean_uses_compact_prompt"], True)
+        self.assertIs(inv["workflow_selection"]["lean_preserves_verbatim_contract"], True)
+        self.assertIs(inv["workflow_selection"]["lean_preserves_full_scoped_source"], True)
+        self.assertEqual(inv["workflow_selection"]["runtime_context_and_proof_owner"], "upstream_runner")
+        self.assertIs(inv["selected_worker_observed"], False)
+        self.assertIs(inv["selected_context_observed"], False)
+        self.assertIs(inv["policy_configuration_is_observed_runtime_proof"], False)
+        self.assertEqual(inv["agy_metadata_scope"], "agy_workers_and_all_reviewers")
+        self.assertEqual(inv["worker_validation_applies_to"], "agy_workers_and_all_reviewers")
+        self.assertEqual(inv["devin_worker_validation"]["pinned_model"], "swe-1-6-slow")
+        self.assertEqual(inv["devin_worker_validation"]["lean_tool_schema_validation_scope"], "devin_lean_only")
+        self.assertIs(inv["devin_worker_validation"]["claim_lean_tool_schema_checks_for_agy_or_non_lean"], False)
+        self.assertIs(inv["devin_worker_validation"]["lean_require_per_session_disabled_tools"], True)
+        self.assertEqual(inv["devin_worker_validation"]["lean_tool_definitions_path"], "agent.tool_definitions")
+        self.assertEqual(
+            inv["devin_worker_validation"]["lean_allowed_tool_definitions"],
+            ["mcp_call_tool", "mcp_list_servers", "mcp_list_tools", "mcp_read_resource", "skill"],
+        )
+        self.assertEqual(
+            inv["devin_worker_validation"]["lean_tool_definitions_rule"],
+            "well_formed_unique_name_nonempty_subset",
+        )
+        self.assertIs(inv["devin_worker_validation"]["lean_block_invalid_tool_definitions_before_apply"], True)
+        self.assertIs(inv["devin_worker_validation"]["schema_hiding_authorizes_tools"], False)
+        self.assertIs(
+            inv["devin_worker_validation"]["lean_remaining_tools_denied_by_config_and_pre_tool_use_exit_2"],
+            True,
+        )
         self.assertIs(inv["selected_model_observed"], False)
         self.assertEqual(inv["model_selection"]["preferred_model"], "claude-opus-5-5-high")
         self.assertEqual(inv["model_selection"]["default_model_when_unset"], "gemini-4-argon-high")
         self.assertEqual(inv["pinned_effort"], "high")
         self.assertEqual(inv["permission_mode"], "request-review")
         self.assertIn("--no-resume-worker", inv["required_runner_flags"])
+        self.assertIn("--context-mode", inv["required_runner_flags"])
         self.assertEqual(inv["jev_version"], "jev-1.13.0")
         self.assertEqual(inv["min_reviewers"], 1)
         self.assertEqual(inv["max_reworks"], 2)
@@ -154,6 +189,11 @@ class RealRepositoryTests(unittest.TestCase):
         self.assertEqual(code_txt, 0)
         self.assertIn("Parents (extends): frontend", out_txt)
         self.assertIn("frontend -> dashboard", out_txt)
+        self.assertIn("WORKFLOW_WORKER=agy,devin", out_txt)
+        self.assertIn("WORKFLOW_CONTEXT=lean,compact,full", out_txt)
+        self.assertIn("default_context_when_unset=lean", out_txt)
+        self.assertIn("agy_scope=agy_workers_and_all_reviewers", out_txt)
+        self.assertIn("not observed runtime proof", out_txt)
         self.assertIn("preferred=claude-opus-5-5-high", out_txt)
         self.assertIn("not an observed selected model", out_txt)
 
@@ -169,6 +209,10 @@ class RealRepositoryTests(unittest.TestCase):
             "blocked_requires_stronger_reviewer",
         )
         self.assertFalse(q["core_policy_invariants"]["quant_execution_enabled"])
+        pol = json.loads((REPO_ROOT / "core" / "policy.json").read_text(encoding="utf-8"))
+        self.assertIn("no approved stronger-reviewer integration", pol["runners"]["quant"]["blocked_reason"])
+        self.assertIn("distinct provider or model names do not prove stronger review", pol["runners"]["quant"]["blocked_reason"])
+        self.assertIn("do not prove stronger review", pol["runners"]["quant"]["unblock_requirement"])
 
 
 class ValidationAndSecurityTests(unittest.TestCase):
@@ -643,6 +687,91 @@ class ModelPolicyValidationTests(unittest.TestCase):
             pol_path.write_text(base, encoding="utf-8")
             code_ok, _, err_ok = _run_cli(["validate"], repo_root=repo)
             self.assertEqual(code_ok, 0, msg=err_ok)
+
+    def test_accepts_workflow_selection_list_reordering(self) -> None:
+        def reorder(p: dict) -> None:
+            p["execution_model"]["workflow_selection"]["allowed_workers"].reverse()
+            p["execution_model"]["workflow_selection"]["allowed_contexts"].reverse()
+            p["devin_worker_validation"]["lean_allowed_tool_definitions"].reverse()
+
+        self._validate(reorder)
+
+    def test_rejects_workflow_devin_and_scope_contract_weakening(self) -> None:
+        em, wv, dv, pl = (
+            "execution_model",
+            "worker_validation",
+            "devin_worker_validation",
+            "pipeline",
+        )
+        ws = "workflow_selection"
+        cases = [
+            ("workflow_selection", lambda p: p[em].pop(ws)),
+            ("devin_worker_validation", lambda p: p.pop(dv)),
+            ("agy_metadata_scope", lambda p: p[em].pop("agy_metadata_scope")),
+            ("agy_metadata_scope", lambda p: p[em].__setitem__("agy_metadata_scope", "all_workers")),
+            ("applies_to", lambda p: p[wv].pop("applies_to")),
+            ("applies_to", lambda p: p[wv].__setitem__("applies_to", "all_workers")),
+            ("allowed_workers", lambda p: p[em][ws]["allowed_workers"].append("opencode")),
+            ("allowed_workers", lambda p: p[em][ws].__setitem__("allowed_workers", ["agy"])),
+            ("default_worker_when_unset", lambda p: p[em][ws].__setitem__("default_worker_when_unset", "devin")),
+            ("reviewer_worker", lambda p: p[em][ws].__setitem__("reviewer_worker", "devin")),
+            ("allowed_contexts", lambda p: p[em][ws]["allowed_contexts"].append("raw")),
+            ("allowed_contexts", lambda p: p[em][ws].__setitem__("allowed_contexts", ["compact", "full"])),
+            ("allowed_contexts", lambda p: p[em][ws].__setitem__("allowed_contexts", ["lean"])),
+            ("default_context_when_unset", lambda p: p[em][ws].__setitem__("default_context_when_unset", "compact")),
+            ("default_context_when_unset", lambda p: p[em][ws].__setitem__("default_context_when_unset", "full")),
+            ("compact_preserves_verbatim_contract", lambda p: p[em][ws].__setitem__("compact_preserves_verbatim_contract", False)),
+            ("compact_preserves_full_scoped_source", lambda p: p[em][ws].__setitem__("compact_preserves_full_scoped_source", False)),
+            ("lean_uses_compact_prompt", lambda p: p[em][ws].__setitem__("lean_uses_compact_prompt", False)),
+            ("lean_preserves_verbatim_contract", lambda p: p[em][ws].__setitem__("lean_preserves_verbatim_contract", False)),
+            ("lean_preserves_full_scoped_source", lambda p: p[em][ws].__setitem__("lean_preserves_full_scoped_source", False)),
+            ("runtime_context_and_proof_owner", lambda p: p[em][ws].__setitem__("runtime_context_and_proof_owner", "harness_adapter")),
+            ("shares_task_retry_ledger", lambda p: p[em][ws].__setitem__("shares_task_retry_ledger", False)),
+            ("reset_retry_ledger_on_worker_change", lambda p: p[em][ws].__setitem__("reset_retry_ledger_on_worker_change", True)),
+            ("reset_retry_ledger_on_context_change", lambda p: p[em][ws].__setitem__("reset_retry_ledger_on_context_change", True)),
+            ("pinned_model", lambda p: p[dv].__setitem__("pinned_model", "swe-1-5")),
+            ("trajectory_schema_version", lambda p: p[dv].__setitem__("trajectory_schema_version", "ATIF-v1.6")),
+            ("cli_permission_mode", lambda p: p[dv].__setitem__("cli_permission_mode", "request-review")),
+            ("proof_permission_mode", lambda p: p[dv].__setitem__("proof_permission_mode", "request-review")),
+            ("forbid_request_review_permission_claim", lambda p: p[dv].__setitem__("forbid_request_review_permission_claim", False)),
+            ("claim_effort_high", lambda p: p[dv].__setitem__("claim_effort_high", True)),
+            ("permission_config", lambda p: p[dv].__setitem__("permission_config", "allow_all")),
+            ("pre_tool_use_hook", lambda p: p[dv].__setitem__("pre_tool_use_hook", "allow")),
+            ("pre_tool_use_exit_code", lambda p: p[dv].__setitem__("pre_tool_use_exit_code", 0)),
+            ("require_isolated_cwd", lambda p: p[dv].__setitem__("require_isolated_cwd", False)),
+            ("max_tool_calls", lambda p: p[dv].__setitem__("max_tool_calls", 1)),
+            ("max_observations", lambda p: p[dv].__setitem__("max_observations", 1)),
+            ("lean_tool_schema_validation_scope", lambda p: p[dv].__setitem__("lean_tool_schema_validation_scope", "all_workers")),
+            ("claim_lean_tool_schema_checks_for_agy_or_non_lean", lambda p: p[dv].__setitem__("claim_lean_tool_schema_checks_for_agy_or_non_lean", True)),
+            ("lean_require_per_session_disabled_tools", lambda p: p[dv].__setitem__("lean_require_per_session_disabled_tools", False)),
+            ("lean_tool_definitions_path", lambda p: p[dv].__setitem__("lean_tool_definitions_path", "tool_definitions")),
+            ("lean_allowed_tool_definitions", lambda p: p[dv].__setitem__("lean_allowed_tool_definitions", ["mcp_call_tool", "skill"])),
+            ("lean_allowed_tool_definitions", lambda p: p[dv]["lean_allowed_tool_definitions"].append("bash")),
+            ("lean_allowed_tool_definitions", lambda p: p[dv]["lean_allowed_tool_definitions"].append("skill")),
+            ("lean_tool_definitions_rule", lambda p: p[dv].__setitem__("lean_tool_definitions_rule", "any_subset")),
+            ("lean_block_invalid_tool_definitions_before_apply", lambda p: p[dv].__setitem__("lean_block_invalid_tool_definitions_before_apply", False)),
+            ("schema_hiding_authorizes_tools", lambda p: p[dv].__setitem__("schema_hiding_authorizes_tools", True)),
+            ("lean_remaining_tools_denied_by_config_and_pre_tool_use_exit_2", lambda p: p[dv].__setitem__("lean_remaining_tools_denied_by_config_and_pre_tool_use_exit_2", False)),
+            ("apply_handoff_only_after_proof_validation", lambda p: p[dv].__setitem__("apply_handoff_only_after_proof_validation", False)),
+            ("require_precondition_hashes", lambda p: p[dv].__setitem__("require_precondition_hashes", False)),
+            ("require_atomic_rollback", lambda p: p[dv].__setitem__("require_atomic_rollback", False)),
+            ("allow_deletions", lambda p: p[dv].__setitem__("allow_deletions", True)),
+            ("allow_symlinks", lambda p: p[dv].__setitem__("allow_symlinks", True)),
+            ("execute_returned_commands", lambda p: p[dv].__setitem__("execute_returned_commands", True)),
+            ("separate_usage_totals_from_agy", lambda p: p[dv].__setitem__("separate_usage_totals_from_agy", False)),
+            ("--context-mode", lambda p: p[em]["required_runner_flags"].remove("--context-mode")),
+            ("--context-mode", lambda p: p["runners"]["task"]["supported_flags"].remove("--context-mode")),
+            ("ordered_stages", lambda p: p[pl]["ordered_stages"].__setitem__(0, "external_agy_worker")),
+            ("worker_provider", lambda p: p[pl]["reporting"]["required_fields"].remove("worker_provider")),
+            ("worker_model", lambda p: p[pl]["reporting"]["required_fields"].remove("worker_model")),
+            ("reviewer_model", lambda p: p[pl]["reporting"]["required_fields"].remove("reviewer_model")),
+            ("context_mode", lambda p: p[pl]["reporting"]["required_fields"].remove("context_mode")),
+            ("separate_devin_and_agy_usage", lambda p: p[pl]["reporting"].__setitem__("separate_devin_and_agy_usage", False)),
+            ("devin_usage_totals_key", lambda p: p[pl]["reporting"].__setitem__("devin_usage_totals_key", "usage_totals.gemini")),
+        ]
+        for expected, mutate in cases:
+            with self.subTest(expected=expected):
+                self._assert_rejected(expected, mutate)
 
 
 class DoctorAndCliErrorTests(unittest.TestCase):
