@@ -20,7 +20,7 @@
       "name": "agy",
       "binary": "agy",
       "required_for": "execution",
-      "description": "External Antigravity CLI used for worker and fresh reviewer (pinned to gemini-4-argon-high --effort high)."
+      "description": "External Antigravity CLI used for worker and fresh reviewers, pinned to the coordinator-selected model (claude-opus-5-5-high while available, otherwise verified gemini-4-argon-high; unset/empty AGY_MODEL defaults to gemini-4-argon-high) with --effort high."
     },
     {
       "name": "jev-pool",

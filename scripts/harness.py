@@ -12,6 +12,11 @@ import shutil
 import sys
 from typing import Any, Sequence, TextIO
 
+try:
+    from scripts import model_policy
+except ImportError:
+    import model_policy  # type: ignore[no-redef]
+
 SCHEMA_VERSION = "1.0.0"
 DEFAULT_REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SKILLS_ROOT = Path.home() / ".agents" / "skills"
@@ -50,9 +55,21 @@ EXPECTED_FAIL_CLOSED_CONDITIONS = {
     "timeout",
     "quota_error",
     "auth_error",
+    "provider_error",
+    "availability_error",
+    "incomplete_proof",
+    "missing_permission_metadata",
+}
+# Obsolete unconditional fixed-pin fields; rejected instead of silently ignored.
+STALE_MODEL_POLICY_FIELDS = {"pinned_model", "forbid_model_override"}
+KNOWN_EXEC_FLAGS = {
+    "allow_local_fallback",
+    "allow_internal_coding_without_exception",
+    "forbid_effort_override",
 }
 EXPECTED_REPORTING_FIELDS = {
     "verdict",
+    "actual_model",
     "files",
     "actual_check_exit_codes",
     "confidence_below_100_percent",
@@ -277,13 +294,18 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
         raise HarnessError(
             f"{em_ctx}: allow_internal_coding_without_exception must be false."
         )
-    if (
-        _require_nonempty_str(exec_model, "pinned_model", em_ctx)
-        != "gemini-4-argon-high"
-    ):
-        raise HarnessError(
-            f"{em_ctx}: pinned_model must be pinned to 'gemini-4-argon-high'."
-        )
+    stale = sorted(
+        k
+        for k in exec_model
+        if k in STALE_MODEL_POLICY_FIELDS
+        or (("override" in k or k.startswith("allow_")) and k not in KNOWN_EXEC_FLAGS)
+    )
+    if stale:
+        raise HarnessError(f"{em_ctx}: stale or unsupported override fields: {stale}.")
+    try:
+        model_policy.validate_model_policy(policy)
+    except ValueError as exc:
+        raise HarnessError(f"{ctx}: {exc}") from exc
     if _require_nonempty_str(exec_model, "pinned_effort", em_ctx) != "high":
         raise HarnessError(f"{em_ctx}: pinned_effort must be 'high'.")
     if _require_nonempty_str(exec_model, "effort_slug_fallback", em_ctx) != "-high":
@@ -300,8 +322,8 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
         raise HarnessError(
             f"{em_ctx}: required_runner_flags must contain '--no-resume-worker'."
         )
-    if _require_bool(exec_model, "forbid_model_override", em_ctx) is not True:
-        raise HarnessError(f"{em_ctx}: forbid_model_override must be true.")
+    if _require_bool(exec_model, "forbid_unsupported_models", em_ctx) is not True:
+        raise HarnessError(f"{em_ctx}: forbid_unsupported_models must be true.")
     if _require_bool(exec_model, "forbid_effort_override", em_ctx) is not True:
         raise HarnessError(f"{em_ctx}: forbid_effort_override must be true.")
 
@@ -309,13 +331,18 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
     wv_ctx = f"{ctx}.worker_validation"
     if _require_bool(worker_val, "require_exit_zero", wv_ctx) is not True:
         raise HarnessError(f"{wv_ctx}: require_exit_zero must be true.")
-    if (
-        _require_nonempty_str(worker_val, "require_exact_init_model", wv_ctx)
-        != "gemini-4-argon-high"
+    for key, expected in (
+        ("require_exact_init_model", "selected_model"),
+        ("require_init_permission_mode", "request-review"),
     ):
-        raise HarnessError(
-            f"{wv_ctx}: require_exact_init_model must be 'gemini-4-argon-high'."
-        )
+        if _require_nonempty_str(worker_val, key, wv_ctx) != expected:
+            raise HarnessError(f"{wv_ctx}: {key} must be '{expected}'.")
+    for flag in (
+        "missing_permission_mode_blocks",
+        "require_same_selected_model_for_worker_and_reviewers",
+    ):
+        if _require_bool(worker_val, flag, wv_ctx) is not True:
+            raise HarnessError(f"{wv_ctx}: {flag} must be true.")
     if _require_nonempty_str(worker_val, "required_result_status", wv_ctx) != "SUCCESS":
         raise HarnessError(f"{wv_ctx}: required_result_status must be 'SUCCESS'.")
     if _require_bool(worker_val, "require_nonempty_response", wv_ctx) is not True:
@@ -762,11 +789,13 @@ def _build_effective_profile(
     effective_route["max_reworks"] = effective_max_reworks
 
     exec_model = policy["execution_model"]
+    model_sel = exec_model["model_selection"]
     jev_info = policy["pipeline"]["jev"]
     core_invariants = {
         "mode": exec_model["mode"],
         "worker_cli": exec_model["worker_cli"],
-        "pinned_model": exec_model["pinned_model"],
+        "model_selection": json.loads(json.dumps(model_sel)),
+        "selected_model_observed": False,
         "pinned_effort": exec_model["pinned_effort"],
         "permission_mode": exec_model["permission_mode"],
         "required_runner_flags": list(exec_model["required_runner_flags"]),
@@ -1597,6 +1626,16 @@ def _build_parser() -> _HarnessArgumentParser:
         help="Maximum worker timeout (default: 1800).",
     )
     p_run.add_argument(
+        "--max-reworks",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Coordinator-supplied remaining rework budget, 0..2 (default: policy ceiling 2). "
+            "Not a retry permission or a ledger reset."
+        ),
+    )
+    p_run.add_argument(
         "--skills-root",
         type=Path,
         default=None,
@@ -1633,6 +1672,7 @@ def _format_list_output(items: list[dict[str, Any]]) -> str:
 
 def _format_show_output(eff: dict[str, Any]) -> str:
     inv = eff["core_policy_invariants"]
+    ms = inv["model_selection"]
     parents = ", ".join(eff["extends"]) if eff["extends"] else "(none)"
     ancestors = ", ".join(eff["ancestors"]) if eff["ancestors"] else "(none)"
     aliases = ", ".join(eff["aliases"]) if eff["aliases"] else "(none)"
@@ -1649,7 +1689,9 @@ def _format_show_output(eff: dict[str, Any]) -> str:
         (
             "Core Policy (invariant, non-weakening): "
             f"mode={inv['mode']}, cli={inv['worker_cli']}, "
-            f"model={inv['pinned_model']}, effort={inv['pinned_effort']}, "
+            f"models={','.join(ms['allowed_models'])} (preferred={ms['preferred_model']}, "
+            f"default_when_unset={ms['default_model_when_unset']}; policy only, not an observed selected model), "
+            f"effort={inv['pinned_effort']}, "
             f"permission={inv['permission_mode']}, flags={' '.join(inv['required_runner_flags'])}, "
             f"jev={inv['jev_binary']} ({inv['jev_version']}), "
             f"min_reviewers={inv['min_reviewers']}, max_reworks={inv['max_reworks']}"
@@ -1797,6 +1839,7 @@ def main(
             profiles=args.profiles,
             task_id=args.task_id,
             worker_timeout=args.worker_timeout,
+            max_reworks=args.max_reworks,
             repo_root=effective_repo_root,
             skills_root=effective_skills_root,
             env_path=env_path,

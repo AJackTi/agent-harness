@@ -20,13 +20,13 @@ Any task involving:
 2. **Realistic Friction (`Realistic Friction`)**: Must fully account for transaction fees (maker/taker fees), slippage, and funding; never report results assuming zero costs.
 3. **LONG/SHORT Parity (`LONG/SHORT Parity`)**: Entry/exit logic, fee calculation, funding, and liquidation must be verified symmetrically for both `LONG` and `SHORT` directions.
 4. **Determinism (`Deterministic Seeds & Reproducible Datasets`)**: All tests and verification datasets must fix random seeds and reproduce 100% identical results across runs.
-5. **Stronger Reviewer (`Stronger Reviewer`)**: Requires at least `2` independent fresh reviewers **and** review capability stronger than the worker. Two fresh sessions using the same `gemini-4-argon-high` model are **independent (`independent`)**, **not stronger (`not stronger`)**.
+5. **Stronger Reviewer (`Stronger Reviewer`)**: Requires at least `2` independent fresh reviewers **and** review capability proven stronger than the selected worker model. Fresh sessions pinned to the same selected `AGY_MODEL` (whether `claude-opus-5-5-high` or `gemini-4-argon-high`) are **independent (`independent`)**, **not stronger (`not stronger`)**.
 
 ## 3. Current Execution Status: `BLOCKED` & Unblock Conditions
 
 - Currently, `python3 scripts/harness.py run --profile quant --work-kind quant ...` **must return `BLOCKED` (non-zero exit code)**.
-- **Reason**: The provided runner (`antigravity-sol-quant-runner`) can currently only invoke the same `gemini-4-argon-high` model and cannot yet prove a stronger reviewer as required by the user.
+- **Reason**: The provided runner (`antigravity-sol-quant-runner`) currently only provides fresh reviewers pinned to the same coordinator-selected worker model and cannot yet prove a reviewer stronger than that model, as required by the user. Selecting `claude-opus-5-5-high` as the worker model does not by itself prove a stronger reviewer or unblock `quant`.
 - **Exact Unblock Requirement**:
-  1. Provision and mechanically verify a reviewer model/tier stronger than `gemini-4-argon-high` in `antigravity-sol-quant-runner`.
+  1. Provision and mechanically verify a reviewer model/tier proven stronger than the selected worker model in `antigravity-sol-quant-runner`.
   2. Obtain explicit user approval to set `runners.quant.execution_enabled = true` in [../core/policy.json](../core/policy.json).
 - **No Bypassing Rules**: Never implicitly reroute `quant` work to `task`, and never modify `leverage`, `margin`, `endpoints`, `credentials`, or `safety gates` without authorization.

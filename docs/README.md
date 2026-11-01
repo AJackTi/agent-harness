@@ -5,7 +5,7 @@ The `docs/` directory provides the navigation map, composition architecture, exe
 ## Core Documents
 
 1. [ARCHITECTURE.md](ARCHITECTURE.md) — Three-layer architecture (`core` + `domain profile` + `repo-context`), `dashboard` inheritance from `frontend`, `quant` escalation rules, and the thin-adapter CLI design.
-2. [WORKFLOW.md](WORKFLOW.md) — Standard execution pipeline with `agy` (`gemini-4-argon-high --effort high`), `jev-1.13.0`, fresh reviewers, and usage instructions for [../scripts/harness.py](../scripts/harness.py).
+2. [WORKFLOW.md](WORKFLOW.md) — Standard execution pipeline with `agy` (coordinator-selected `AGY_MODEL`: `claude-opus-5-5-high` preferred, verified `gemini-4-argon-high` alternative, `--effort high`), the coordinator-owned retry ledger (`--max-reworks 0..2`), `jev-1.13.0`, fresh reviewers, and usage instructions for [../scripts/harness.py](../scripts/harness.py).
 3. [PROVENANCE.md](PROVENANCE.md) — Conceptual inspiration from `repository-harness` and `harness-engineering-demo`, independent implementation scope, and boundaries with externally installed skills.
 
 ## Quick Links to Other Sections

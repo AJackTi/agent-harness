@@ -95,6 +95,7 @@ agent-harness/
 │   └── task.md
 ├── scripts/
 │   ├── harness.py
+│   ├── model_policy.py
 │   ├── run_adapter.py
 │   └── run_contract.py
 └── tests/
@@ -117,6 +118,8 @@ The [scripts/harness.py](scripts/harness.py) CLI supports the `list`, `show`, `d
 - `--work-kind {task,quant}` (required): execution seam type (`task` or `quant`).
 - `--id TASK_ID` (optional): valid task identifier (defaults to the `stem` of the packet file).
 - `--worker-timeout SECONDS` (optional): positive integer worker timeout in seconds (defaults to `1800`).
+- `--max-reworks N` (optional): integer `0..2` (defaults to `2`, the policy ceiling) forwarded to the runner. Pass the reduced **remaining** budget of the coordinator-owned task-wide retry ledger (at most `2` extra worker executions per task, shared across internal reworks and cross-run/model restarts, never reset). The flag only validates and forwards the value; it does not compute or enforce the ledger and does not authorize a restart.
+- `AGY_MODEL` (environment): the coordinator-selected model, exactly `claude-opus-5-5-high` (preferred while available) or verified `gemini-4-argon-high`; unset or empty defaults to `gemini-4-argon-high` for compatibility, and any other value is `BLOCKED`. The child runner receives the resolved `AGY_MODEL`; the harness performs no quota fetching, model selection, or failover.
 - `--skills-root PATH` (optional): real (non-symlink) root directory containing skills (defaults to `~/.agents/skills`).
 - `--dry-run` (optional): runs completely offline (does not check `agy`/`jev-pool` on `PATH` and does not spawn external processes), **but still requires** a safe runner script `antigravity-task-runner/scripts/run_workflow.py` under `--skills-root` along with valid `--workspace`, `--packet`, `--scope`, and `--output-dir` arguments.
 
@@ -135,12 +138,29 @@ python3 scripts/harness.py run \
   --dry-run
 ```
 
-The command above validates the packet/workspace/scope/output-dir contract, verifies the safe existence of the runner script under `--skills-root`, performs a conservative quantitative keyword screen on the `TASK:` header line, and prints the `shlex.join` command invoking `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` with `--min-reviewers 1 --max-reworks 2 --no-resume-worker`:
+The command above validates the packet/workspace/scope/output-dir contract, verifies the safe existence of the runner script under `--skills-root`, performs a conservative quantitative keyword screen on the `TASK:` header line, and prints the `shlex.join` command, prefixed with `AGY_MODEL=<resolved model>`, invoking `~/.agents/skills/antigravity-task-runner/scripts/run_workflow.py` with `--min-reviewers 1 --max-reworks 2 --no-resume-worker` (`2` is the default when `--max-reworks` is omitted):
 - **Minimum reviewer count (`--min-reviewers`)**: computed as the **maximum (`max`)** across the core policy (`core/policy.json`) and all selected profiles along with their inheritance chain (`extends` / `lineage`). The current configuration defaults to `1`; the installed review gate (`jev_review_gate.py`) supports the range `1..4` (values outside `1..4` fail closed with `BLOCKED`).
-- **The `--no-resume-worker` flag**: passed to the upstream workflow (`run_workflow.py`), **not** directly to the `agy` CLI or reviewer sessions. Both workers and fresh reviewers are pinned to `gemini-4-argon-high --effort high` under `request-review` mode; a fresh context on the same model is **independent**, **not stronger**.
+- **The `--no-resume-worker` flag**: passed to the upstream workflow (`run_workflow.py`), **not** directly to the `agy` CLI or reviewer sessions. Both workers and fresh reviewers are pinned to the same selected `AGY_MODEL` with `--effort high` under `request-review` mode; a fresh context on the same selected model is **independent**, **not stronger**.
 - **Why task scope (`--scope`) must be kept small**: in addition to the `<= 8000` character limit on the input task packet file, the external installed review gate caps the **focused diff at `12000` characters** and the **internal review packet at `20000` characters**. Split work into small, focused tasks; never loosen review gates and never compress or minify source code just to fit within character limits.
 
-### Example 2: Dashboard/Data Task Involving PnL/Funding/Risk (`quant` — Currently `BLOCKED`)
+### Example 2: Explicit Model Selection and Remaining Rework Budget (`task`)
+
+```bash
+AGY_MODEL=claude-opus-5-5-high python3 scripts/harness.py run \
+  --workspace /tmp/example-consumer-repo \
+  --packet /tmp/example-task.md \
+  --scope src/service.ts \
+  --verify-cmd "npm test" \
+  --output-dir /tmp/example-proof-out-restart \
+  --profile backend/typescript \
+  --work-kind task \
+  --max-reworks 1 \
+  --dry-run
+```
+
+Here the coordinator has already refreshed quota/auth/availability (`agy --print /usage` for backend quota; a zero-tool probe proves availability only) and selected Opus. `--max-reworks 1` is the coordinator's own ledger arithmetic (e.g., a restart after a quota block reserves one of the two extra executions). The harness does not compute the ledger or authorize the restart. Model mismatch and permission denial are terminal; only quota/auth/availability blocks permit reassessing the model, never via account, key, or billing changes. Proof covers the aggregate changes of all executions against the original snapshot.
+
+### Example 3: Dashboard/Data Task Involving PnL/Funding/Risk (`quant` — Currently `BLOCKED`)
 
 ```bash
 python3 scripts/harness.py run \
@@ -162,3 +182,4 @@ This command fails closed with a `BLOCKED` status (non-zero exit code) and repor
 2. **No Bundled Runners or External Binaries**: This repository provides only the orchestration framework and thin adapter layer. Even `--dry-run` (offline) requires the `antigravity-task-runner/scripts/run_workflow.py` script to exist safely under `--skills-root`; live execution (without `--dry-run`) additionally requires executable `agy` and `jev-pool` (`jev-1.13.0`) binaries on the host workstation.
 3. **`quant` Execution Is Actively `BLOCKED`**: The repository owner requires a **stronger reviewer** for financial mathematics, PnL, funding, liquidation, and risk logic. Keyword scanning on the `TASK:` header line in [scripts/run_contract.py](scripts/run_contract.py) is only a supplemental conservative heuristic; **semantic seam classification remains the responsibility of the coordinator**. Unlocking `quant` execution in the future requires implementing and integrating an owner-approved dedicated `quant` execution path backed by stronger-reviewer proof and tests—**not merely flipping the `execution_enabled` flag** in [core/policy.json](core/policy.json).
 4. **No Sample Application Code or Trading Algorithms**: This repository provides general-purpose engineering harness tooling only and contains no financial formulas, backtest results, or application starter code.
+5. **Coordinator-Owned Model Selection and Retry Ledger**: The harness fetches no quota, selects no model, performs no failover, and does not enforce the task-wide retry ledger; [scripts/model_policy.py](scripts/model_policy.py) only resolves `AGY_MODEL` and validates the declarative policy. A fresh reviewer on the same selected model is independent, not stronger, so `quant` stays `BLOCKED` regardless of the selected model.

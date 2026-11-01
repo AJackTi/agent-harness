@@ -28,7 +28,13 @@ try:
 except ImportError:
     import run_contract  # type: ignore[no-redef]
 
+try:
+    from scripts import model_policy
+except ImportError:
+    import model_policy  # type: ignore[no-redef]
+
 ContractError = run_contract.ContractError
+MAX_REWORKS_CEILING = int(model_policy.RETRY_POLICY["max_reworks_ceiling"])
 
 REQUIRED_TASK_RUNNER_ID = "antigravity-task-runner"
 REQUIRED_TASK_RUNNER_REL_PATH = "antigravity-task-runner/scripts/run_workflow.py"
@@ -52,6 +58,31 @@ def _require_positive_int(value: Any, label: str) -> int:
     """Validate that value is a non-boolean integer >= 1."""
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ContractError(f"invalid {label}: {value!r} (must be integer >= 1)")
+    return value
+
+
+def resolve_dispatch_model(raw_value: Any) -> str:
+    """Resolve the coordinator-selected AGY_MODEL value via the model policy resolver.
+
+    No quota lookup, auto-selection, or failover is performed; unsupported values BLOCK.
+    """
+    try:
+        return model_policy.resolve_selected_model(raw_value)
+    except ValueError as exc:
+        raise ContractError(f"invalid {model_policy.MODEL_ENV_VAR} selection: {exc}") from exc
+
+
+def resolve_max_reworks(value: Any, ceiling: int = MAX_REWORKS_CEILING) -> int:
+    """Validate a coordinator-supplied remaining rework budget (defaults to the policy ceiling).
+
+    The value is passed through verbatim; it grants no retry permission and never resets a ledger.
+    """
+    if value is None:
+        return ceiling
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > ceiling:
+        raise ContractError(
+            f"invalid max_reworks: {value!r} (must be integer 0..{ceiling})"
+        )
     return value
 
 
@@ -294,6 +325,7 @@ def build_runner_argv(
             f"required min_reviewers ({min_reviewers!r}) exceeds installed review gate capability "
             f"({MIN_REVIEW_GATE_REVIEWERS}..{MAX_REVIEW_GATE_REVIEWERS})"
         )
+    resolve_max_reworks(max_reworks)
     return [
         python_executable or sys.executable,
         str(runner_script),
@@ -332,12 +364,16 @@ def prepare_run(
     profiles: Sequence[str],
     task_id: str | None = None,
     worker_timeout: int | None = None,
+    max_reworks: int | None = None,
     repo_root: Path | None = None,
     skills_root: Path | None = None,
     env_path: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Validate harness policy, profiles, run contract, runner path, and (for real runs) prerequisites."""
+    # Resolve the coordinator-selected model first so invalid selections BLOCK before any other work.
+    selected_model = resolve_dispatch_model(os.environ.get(model_policy.MODEL_ENV_VAR))
+
     effective_repo_root = (
         Path(repo_root) if repo_root is not None else harness.DEFAULT_REPO_ROOT
     )
@@ -426,16 +462,17 @@ def prepare_run(
         policy["pipeline"]["reviewers"]["task_min_reviewers"],
         "task_min_reviewers",
     )
-    max_reworks = _require_positive_int(
+    policy_max_reworks = _require_positive_int(
         policy["pipeline"]["max_reworks"],
         "max_reworks",
     )
     if (
         core_min_reviewers != 1
-        or max_reworks != 2
+        or policy_max_reworks != MAX_REWORKS_CEILING
         or "--no-resume-worker" not in policy["execution_model"]["required_runner_flags"]
     ):
         raise ContractError("task policy invariant violation")
+    effective_max_reworks = resolve_max_reworks(max_reworks, policy_max_reworks)
 
     min_reviewers = resolve_effective_min_reviewers(
         canonical_profiles,
@@ -467,16 +504,19 @@ def prepare_run(
         runner_script,
         contract,
         min_reviewers=min_reviewers,
-        max_reworks=max_reworks,
+        max_reworks=effective_max_reworks,
         worker_timeout=effective_timeout,
     )
+    # Copy-pastable POSIX command with an explicit model pin; argv itself stays unchanged.
+    model_assignment = f"{model_policy.MODEL_ENV_VAR}={selected_model}"
     return {
         "contract": contract,
         "runner_script": str(runner_script),
         "argv": argv,
-        "command": shlex.join(argv),
+        "command": f"{shlex.quote(model_assignment)} {shlex.join(argv)}",
+        "selected_model": selected_model,
         "min_reviewers": min_reviewers,
-        "max_reworks": max_reworks,
+        "max_reworks": effective_max_reworks,
         "worker_timeout": effective_timeout,
         "dry_run": bool(dry_run),
         "prerequisites": prerequisites,
@@ -494,6 +534,7 @@ def execute_run(
     profiles: Sequence[str],
     task_id: str | None = None,
     worker_timeout: int | None = None,
+    max_reworks: int | None = None,
     repo_root: Path | None = None,
     skills_root: Path | None = None,
     env_path: str | None = None,
@@ -515,6 +556,7 @@ def execute_run(
             profiles=profiles,
             task_id=task_id,
             worker_timeout=worker_timeout,
+            max_reworks=max_reworks,
             repo_root=repo_root,
             skills_root=skills_root,
             env_path=env_path,
@@ -524,10 +566,11 @@ def execute_run(
             print(plan["command"], file=out)
             return 0
 
-        child_env: dict[str, str] | None = None
+        # Child gets a copy of the environment with AGY_MODEL pinned; os.environ is never mutated.
+        child_env: dict[str, str] = os.environ.copy()
         if env_path is not None:
-            child_env = os.environ.copy()
             child_env["PATH"] = str(env_path)
+        child_env[model_policy.MODEL_ENV_VAR] = plan["selected_model"]
 
         try:
             completed = subprocess.run(

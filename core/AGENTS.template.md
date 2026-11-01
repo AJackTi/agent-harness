@@ -14,11 +14,12 @@
 
 This repository adheres to the core policy in [policy.json](policy.json) and [../AGENTS.md](../AGENTS.md):
 
-1. **External-First (`agy`)**: All code/test/docs/config changes must be executed first by `agy` (`gemini-4-argon-high --effort high`, `request-review` mode, `--no-resume-worker` flag). ChatGPT strictly coordinates and performs final review.
-2. **Runner Routing**:
-   - `task` -> `antigravity-task-runner` (`--min-reviewers 1 --max-reworks 2`)
-   - `quant` -> `antigravity-sol-quant-runner` (currently `BLOCKED` until a stronger reviewer is validated; never run PnL/funding/liquidation/risk tasks under `task`).
-3. **Pipeline**: `agy worker` -> repo-native mechanical checks -> `jev-1.13.0` (`jev-pool`, evidence triage only, no file edits) -> fresh pinned reviewer -> ChatGPT final review.
+1. **External-First (`agy`)**: All code/test/docs/config changes must be executed first by `agy` in `request-review` mode, with the `--no-resume-worker` flag passed to the upstream workflow (`run_workflow.py`), not directly to `agy`. ChatGPT strictly coordinates and performs final review; no local fallback.
+2. **Model Selection**: Before each task, the coordinator refreshes actual quota/auth/availability (`agy --print /usage` is a backend quota query; a zero-tool probe proves availability only), then selects `claude-opus-5-5-high` while available, otherwise verified `gemini-4-argon-high`, and sets `AGY_MODEL` explicitly (unset/empty defaults to Gemini). Worker and fresh reviewers use the same selected model with `--effort high`; exact `init.model` and explicit `init.permission_mode` are required. Every error is `BLOCKED`; there is no automatic failover. Report the actual selected model.
+3. **Runner Routing**:
+   - `task` -> `antigravity-task-runner` (`--min-reviewers 1`, `--max-reworks` = remaining task-wide retry budget, `0..2`)
+   - `quant` -> `antigravity-sol-quant-runner` (currently `BLOCKED` until a reviewer stronger than the selected model is proven and explicitly approved; never run PnL/funding/liquidation/risk tasks under `task`).
+4. **Pipeline**: `agy worker` -> repo-native mechanical checks -> `jev-1.13.0` (`jev-pool`, evidence triage only, no file edits) -> fresh pinned reviewer -> ChatGPT final review. The retry ledger allows at most `2` extra worker executions per task across reworks and restarts, never resets, and requires aggregate review against the original snapshot.
 
 ## 3. Consumer-Accepted Verification Commands
 

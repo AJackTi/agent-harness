@@ -139,7 +139,10 @@ class RealRepositoryTests(unittest.TestCase):
         self.assertGreater(len(dash["effective_special_risks"]), 4)
 
         inv = dash["core_policy_invariants"]
-        self.assertEqual(inv["pinned_model"], "gemini-4-argon-high")
+        self.assertNotIn("pinned_model", inv)
+        self.assertIs(inv["selected_model_observed"], False)
+        self.assertEqual(inv["model_selection"]["preferred_model"], "claude-opus-5-5-high")
+        self.assertEqual(inv["model_selection"]["default_model_when_unset"], "gemini-4-argon-high")
         self.assertEqual(inv["pinned_effort"], "high")
         self.assertEqual(inv["permission_mode"], "request-review")
         self.assertIn("--no-resume-worker", inv["required_runner_flags"])
@@ -151,6 +154,8 @@ class RealRepositoryTests(unittest.TestCase):
         self.assertEqual(code_txt, 0)
         self.assertIn("Parents (extends): frontend", out_txt)
         self.assertIn("frontend -> dashboard", out_txt)
+        self.assertIn("preferred=claude-opus-5-5-high", out_txt)
+        self.assertIn("not an observed selected model", out_txt)
 
     def test_show_quant_reports_blocked_invariants(self) -> None:
         code, out, err = _run_cli(["show", "quant", "--json"])
@@ -279,11 +284,11 @@ class ValidationAndSecurityTests(unittest.TestCase):
             repo = _copy_repo_fixture(Path(tmp))
             pol_path = repo / "core" / "policy.json"
             pol = json.loads(pol_path.read_text(encoding="utf-8"))
-            pol["execution_model"]["pinned_model"] = "other-model"
+            pol["execution_model"]["pinned_model"] = "gemini-4-argon-high"
             pol_path.write_text(json.dumps(pol), encoding="utf-8")
             code, _, err = _run_cli(["validate"], repo_root=repo)
             self.assertNotEqual(code, 0)
-            self.assertIn("gemini-4-argon-high", err)
+            self.assertIn("pinned_model", err)
 
         with tempfile.TemporaryDirectory() as tmp:
             repo = _copy_repo_fixture(Path(tmp))
@@ -504,6 +509,140 @@ class ValidationAndSecurityTests(unittest.TestCase):
             code_esc, _, err_esc = _run_cli(["validate"], repo_root=repo)
             self.assertNotEqual(code_esc, 0)
             self.assertIn("outside_repo.md", err_esc)
+
+
+class ModelPolicyValidationTests(unittest.TestCase):
+    """Mutated fixture policies for the declarative quota-aware model policy."""
+
+    def _validate(self, mutate) -> None:
+        pol = json.loads((REPO_ROOT / "core" / "policy.json").read_text(encoding="utf-8"))
+        mutate(pol)
+        harness._validate_policy(pol, REPO_ROOT)
+
+    def test_accepts_allowed_model_configuration(self) -> None:
+        self._validate(lambda p: None)
+
+        def reorder(p: dict) -> None:
+            p["execution_model"]["model_selection"]["allowed_models"].reverse()
+            p["pipeline"]["retry_policy"]["terminal_conditions"].reverse()
+
+        self._validate(reorder)
+
+    def test_rejects_model_policy_weakening(self) -> None:
+        em, wv, pl = "execution_model", "worker_validation", "pipeline"
+
+        def setter(sect: str, key: str, val: object, sub: str | None = None):
+            return lambda p: (p[sect][sub] if sub else p[sect]).__setitem__(key, val)
+
+        cases = [
+            ("unsupported models", lambda p: p[em]["model_selection"]["allowed_models"].append("x")),
+            ("allowed_models", lambda p: p[em]["model_selection"]["allowed_models"].pop()),
+            ("model_selection", lambda p: p[em].pop("model_selection")),
+            ("terminal_conditions", lambda p: p[pl]["retry_policy"]["terminal_conditions"].pop()),
+            ("max_reworks_ceiling", setter(pl, "max_reworks_ceiling", 3, "retry_policy")),
+            ("max_reworks", setter(pl, "max_reworks", 3)),
+            ("allow_model_override", setter(em, "allow_model_override", True)),
+            ("pinned_model", setter(em, "pinned_model", "gemini-4-argon-high")),
+            ("forbid_unsupported_models", setter(em, "forbid_unsupported_models", False)),
+            ("require_exact_init_model", setter(wv, "require_exact_init_model", "x")),
+            ("require_init_permission_mode", lambda p: p[wv].pop("require_init_permission_mode")),
+            ("missing_permission_mode_blocks", setter(wv, "missing_permission_mode_blocks", False)),
+            (
+                "missing_permission_metadata",
+                lambda p: p[wv]["fail_closed_conditions"].remove("missing_permission_metadata"),
+            ),
+            ("actual_model", lambda p: p[pl]["reporting"]["required_fields"].remove("actual_model")),
+            ("execution_enabled", setter("runners", "execution_enabled", True, "quant")),
+        ]
+        for expected, mutate in cases:
+            with self.subTest(expected=expected):
+                with self.assertRaises(harness.HarnessError) as ctx:
+                    self._validate(mutate)
+                self.assertIn(expected, str(ctx.exception))
+
+    def _assert_rejected(self, expected: str, mutate) -> None:
+        with self.assertRaises(harness.HarnessError) as ctx:
+            self._validate(mutate)
+        self.assertIn(expected, str(ctx.exception))
+
+    def test_rejects_allowed_slugs_in_wrong_roles(self) -> None:
+        em, ms = "execution_model", "model_selection"
+        opus, gemini = "claude-opus-5-5-high", "gemini-4-argon-high"
+        cases = [
+            ("preferred_model", lambda p: p[em][ms].__setitem__("preferred_model", gemini)),
+            ("default_model_when_unset", lambda p: p[em][ms].__setitem__("default_model_when_unset", opus)),
+        ]
+        for expected, mutate in cases:
+            with self.subTest(expected=expected):
+                self._assert_rejected(expected, mutate)
+
+    def test_rejects_permission_mode_bypass_values(self) -> None:
+        for value in ("bypass", "auto", ""):
+            with self.subTest(value=value):
+                self._assert_rejected(
+                    "require_init_permission_mode",
+                    lambda p, v=value: p["worker_validation"].__setitem__("require_init_permission_mode", v),
+                )
+
+    def test_rejects_stale_forbid_model_override(self) -> None:
+        for value in (True, False):
+            with self.subTest(value=value):
+                self._assert_rejected(
+                    "forbid_model_override",
+                    lambda p, v=value: p["execution_model"].__setitem__("forbid_model_override", v),
+                )
+
+    def test_rejects_removal_of_each_named_fail_closed_condition(self) -> None:
+        names = sorted(harness.EXPECTED_FAIL_CLOSED_CONDITIONS)
+        policy = json.loads((REPO_ROOT / "core" / "policy.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(policy["worker_validation"]["fail_closed_conditions"]), names)
+        for name in names:
+            with self.subTest(name=name):
+                self._assert_rejected(
+                    name,
+                    lambda p, n=name: p["worker_validation"]["fail_closed_conditions"].remove(n),
+                )
+
+    def test_rejects_same_selected_model_requirement_weakening(self) -> None:
+        key = "require_same_selected_model_for_worker_and_reviewers"
+        mutations = [
+            ("false", lambda p: p["worker_validation"].__setitem__(key, False)),
+            ("string", lambda p: p["worker_validation"].__setitem__(key, "true")),
+            ("int", lambda p: p["worker_validation"].__setitem__(key, 1)),
+            ("null", lambda p: p["worker_validation"].__setitem__(key, None)),
+            ("deleted", lambda p: p["worker_validation"].pop(key)),
+        ]
+        for label, mutate in mutations:
+            with self.subTest(mutation=label):
+                self._assert_rejected(key, mutate)
+
+    def test_cli_validate_rejects_wrong_role_and_bypass_policies(self) -> None:
+        em, ms, wv = "execution_model", "model_selection", "worker_validation"
+        cases = [
+            ("preferred_model", lambda p: p[em][ms].__setitem__("preferred_model", "gemini-4-argon-high")),
+            (
+                "default_model_when_unset",
+                lambda p: p[em][ms].__setitem__("default_model_when_unset", "claude-opus-5-5-high"),
+            ),
+            ("require_init_permission_mode", lambda p: p[wv].__setitem__("require_init_permission_mode", "bypass")),
+            ("forbid_model_override", lambda p: p[em].__setitem__("forbid_model_override", True)),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _copy_repo_fixture(Path(tmp))
+            pol_path = repo / "core" / "policy.json"
+            base = pol_path.read_text(encoding="utf-8")
+            for expected, mutate in cases:
+                with self.subTest(expected=expected):
+                    pol = json.loads(base)
+                    mutate(pol)
+                    pol_path.write_text(json.dumps(pol), encoding="utf-8")
+                    code, _, err = _run_cli(["validate"], repo_root=repo)
+                    self.assertNotEqual(code, 0)
+                    self.assertIn(expected, err)
+                    self.assertNotIn("Traceback", err)
+            pol_path.write_text(base, encoding="utf-8")
+            code_ok, _, err_ok = _run_cli(["validate"], repo_root=repo)
+            self.assertEqual(code_ok, 0, msg=err_ok)
 
 
 class DoctorAndCliErrorTests(unittest.TestCase):

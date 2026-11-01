@@ -108,3 +108,37 @@ class RunContractTests(unittest.TestCase):
       self._bad(verify_cmds=[bc])
     for bid in ("", "a/b", "../x", "TBD", "<UNRESOLVED:ID>", "a b"):
       self._bad(task_id=bid)
+
+  def test_model_policy_validated_without_dispatch(self) -> None:
+    def pol(mutate) -> dict:
+      p = json.loads(json.dumps(POLICY))
+      mutate(p)
+      return p
+
+    em, wv, rp = "execution_model", "worker_validation", "retry_policy"
+    self.assertEqual(self._run(policy=pol(lambda p: p[em]["model_selection"]["allowed_models"].reverse()))["status"], "VALIDATED")
+    for mutate in (
+      lambda p: p[em]["model_selection"]["allowed_models"].append("other-model"),
+      lambda p: p[em].__setitem__("pinned_model", "gemini-4-argon-high"),
+      lambda p: p[em].__setitem__("forbid_unsupported_models", False),
+      lambda p: p["pipeline"][rp].__setitem__("terminal_conditions", ["model_mismatch"]),
+      lambda p: p["pipeline"][rp].__setitem__("max_reworks_ceiling", 3),
+      lambda p: p[wv].pop("require_init_permission_mode"),
+      lambda p: p[wv].__setitem__("missing_permission_mode_blocks", False),
+    ):
+      self._bad(policy=pol(mutate))
+    ms, opus, gemini = "model_selection", "claude-opus-5-5-high", "gemini-4-argon-high"
+    for field, wrong in (("preferred_model", gemini), ("default_model_when_unset", opus)):
+      with self.subTest(wrong_role=field):
+        self.assertIn(field, self._bad(policy=pol(lambda p, f=field, w=wrong: p[em][ms].__setitem__(f, w))))
+    for mode in ("bypass", "auto", ""):
+      with self.subTest(permission_mode=mode):
+        self._bad(policy=pol(lambda p, m=mode: p[wv].__setitem__("require_init_permission_mode", m)))
+    for stale in (True, False):
+      with self.subTest(forbid_model_override=stale):
+        self._bad(policy=pol(lambda p, s=stale: p[em].__setitem__("forbid_model_override", s)))
+    with mock.patch.object(subprocess, "run", side_effect=AssertionError("ran")):
+      self.assertEqual(self._run(policy=pol(lambda p: None))["status"], "VALIDATED")
+    self.pkt.write_text(f"TASK: M{Q}", encoding="utf-8")
+    enabled = pol(lambda p: p["runners"]["quant"].__setitem__("execution_enabled", True))
+    self.assertIn("stronger reviewer", self._bad(policy=enabled, work_kind="quant", profile_ids=["quant"]))

@@ -7,7 +7,7 @@
   ],
   "name": "Quantitative Engineering & Risk Profile",
   "domain": "quant",
-  "description": "Orchestration profile for financial math, PnL, funding, liquidation, backtesting, and risk; currently BLOCKED for live execution until a stronger reviewer is proven.",
+  "description": "Orchestration profile for financial math, PnL, funding, liquidation, backtesting, and risk; currently BLOCKED for live execution until a reviewer proven stronger than the selected worker model is available.",
   "extends": [],
   "work_kind": "quant",
   "runner_route": {
@@ -16,7 +16,7 @@
     "min_reviewers": 2,
     "max_reworks": 2,
     "execution_status": "blocked_requires_stronger_reviewer",
-    "unblock_requirement": "Provide and mechanically verify a reviewer model/tier stronger than gemini-4-argon-high in antigravity-sol-quant-runner, with explicit user approval to unblock in core/policy.json."
+    "unblock_requirement": "Provide and mechanically verify a reviewer model/tier proven stronger than the selected worker model in antigravity-sol-quant-runner, with explicit user approval to unblock in core/policy.json. Selecting claude-opus-5-5-high as the worker model does not by itself unblock quant."
   },
   "tools": [
     {

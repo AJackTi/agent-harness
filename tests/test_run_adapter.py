@@ -37,6 +37,11 @@ class RunAdapterAndCliTests(unittest.TestCase):
         home_patcher = mock.patch.object(Path, "home", return_value=self.home)
         home_patcher.start()
         self.addCleanup(home_patcher.stop)
+        # Isolate tests from any ambient coordinator AGY_MODEL selection; restored on cleanup.
+        env_patcher = mock.patch.dict(os.environ, {}, clear=False)
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        os.environ.pop("AGY_MODEL", None)
 
         self.ws = self.base / "workspace"
         (self.ws / "src").mkdir(parents=True)
@@ -103,6 +108,8 @@ class RunAdapterAndCliTests(unittest.TestCase):
             argv.extend(["--id", str(overrides["task_id"])])
         if overrides.get("worker_timeout") is not None:
             argv.extend(["--worker-timeout", str(overrides["worker_timeout"])])
+        if overrides.get("max_reworks") is not None:
+            argv.extend(["--max-reworks", str(overrides["max_reworks"])])
         if overrides.get("dry_run"):
             argv.append("--dry-run")
         if overrides.get("extra_args"):
@@ -176,8 +183,12 @@ class RunAdapterAndCliTests(unittest.TestCase):
             "--no-resume-worker",
         ]
         self.assertNotIn("--kind", parsed_argv)
-        self.assertEqual(parsed_argv, expected_argv)
-        self.assertEqual(lines[0], shlex.join(expected_argv))
+        # Unset AGY_MODEL keeps the compatibility Gemini default, shown explicitly as a prefix.
+        self.assertEqual(parsed_argv[0], "AGY_MODEL=gemini-4-argon-high")
+        self.assertEqual(parsed_argv[1:], expected_argv)
+        self.assertEqual(
+            lines[0], "AGY_MODEL=gemini-4-argon-high " + shlex.join(expected_argv)
+        )
 
     def test_aliases_multiple_profiles_explicit_id_and_timeout_and_advisory_repo_context(
         self,
@@ -269,12 +280,15 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertIsNot(child_env, os.environ)
         self.assertEqual(child_env.get("PATH"), str(self.fake_bin))
         self.assertEqual(child_env.get("HARNESS_ENV_SENTINEL"), "keep-value")
+        self.assertEqual(child_env.get("AGY_MODEL"), "gemini-4-argon-high")
+        self.assertNotIn("AGY_MODEL", os.environ)
         self.assertEqual(called_argv[0], sys.executable)
         self.assertEqual(called_argv[1], str(self.runner_script))
         self.assertEqual(called_argv[2], str(self.pkt.resolve()))
         self.assertIn("--no-resume-worker", called_argv)
 
-        # When env_path is None, normal inherited environment is preserved (env=None passed to subprocess.run).
+        # When env_path is None, the inherited environment (including PATH) is preserved and only
+        # AGY_MODEL is pinned explicitly in a copied child environment.
         inherited_calls: list[dict[str, object]] = []
 
         def _fake_inherited_run(
@@ -289,13 +303,19 @@ class RunAdapterAndCliTests(unittest.TestCase):
             mock.patch.dict(os.environ, {"PATH": str(self.fake_bin)}, clear=False),
             mock.patch.object(subprocess, "run", side_effect=_fake_inherited_run),
         ):
+            inherited_before = dict(os.environ)
             code_inh, _, err_inh = self._invoke_main(
                 self._base_cli_args(dry_run=False),
                 env_path=None,
             )
+            self.assertEqual(os.environ, inherited_before)
         self.assertEqual(code_inh, 0, msg=err_inh)
         self.assertEqual(len(inherited_calls), 1)
-        self.assertIsNone(inherited_calls[0].get("env"))
+        inherited_env = inherited_calls[0].get("env")
+        self.assertIsInstance(inherited_env, dict)
+        self.assertEqual(
+            inherited_env, {**inherited_before, "AGY_MODEL": "gemini-4-argon-high"}
+        )
 
         # Verify nonzero exit codes (1, 2, 3) and outputs propagate verbatim without manufacturing PASS.
         for rc in (1, 2, 3):
@@ -842,6 +862,177 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertIn("BLOCKED", err_pol)
         self.assertNotIn("Traceback", err_pol)
 
+    def _capture_real_run(
+        self, argv: list[str]
+    ) -> tuple[int, str, list[tuple[list[str], dict[str, object]]]]:
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def _fake_run(run_argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append((list(run_argv), dict(kwargs)))
+            return subprocess.CompletedProcess(args=run_argv, returncode=0, stdout="ok\n", stderr="")
+
+        with mock.patch.object(subprocess, "run", side_effect=_fake_run):
+            code, _, err = self._invoke_main(argv, env_path=str(self.fake_bin))
+        return code, err, calls
+
+    def test_explicit_and_default_model_selection_pins_dry_run_and_child_env(self) -> None:
+        cases = [
+            ("claude-opus-5-5-high", "claude-opus-5-5-high"),
+            ("gemini-4-argon-high", "gemini-4-argon-high"),
+            (None, "gemini-4-argon-high"),
+            ("", "gemini-4-argon-high"),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                os.environ.pop("AGY_MODEL", None)
+                if raw is not None:
+                    os.environ["AGY_MODEL"] = raw
+                before_env = dict(os.environ)
+
+                with (
+                    mock.patch.object(subprocess, "run", side_effect=AssertionError("no spawn in dry-run")),
+                    mock.patch.object(shutil, "which", side_effect=AssertionError("no tool checks in dry-run")),
+                ):
+                    code, out, err = self._invoke_main(self._base_cli_args(dry_run=True))
+                self.assertEqual(code, 0, msg=err)
+                parsed = shlex.split(out.strip())
+                self.assertEqual(parsed[0], f"AGY_MODEL={expected}")
+                self.assertEqual(parsed[1], sys.executable)
+                self.assertIn("--no-resume-worker", parsed)
+
+                code_real, err_real, calls = self._capture_real_run(self._base_cli_args())
+                self.assertEqual(code_real, 0, msg=err_real)
+                self.assertEqual(len(calls), 1)
+                run_argv, kwargs = calls[0]
+                self.assertIs(kwargs.get("shell"), False)
+                self.assertEqual(run_argv[0], sys.executable)
+                self.assertNotIn(f"AGY_MODEL={expected}", run_argv)
+                child_env = kwargs.get("env")
+                assert isinstance(child_env, dict)
+                self.assertEqual(child_env["AGY_MODEL"], expected)
+                self.assertEqual(child_env["PATH"], str(self.fake_bin))
+                self.assertEqual(os.environ, before_env)
+
+                plan = run_adapter.prepare_run(
+                    workspace=self.ws,
+                    packet_path=self.pkt,
+                    scope=["src/service.ts"],
+                    verify_cmds=["npm test"],
+                    output_dir=self.out_dir,
+                    work_kind="task",
+                    profiles=["frontend"],
+                    skills_root=self.skills_root,
+                    dry_run=True,
+                )
+                self.assertEqual(plan["selected_model"], expected)
+
+    def test_unsupported_or_whitespace_model_blocks_before_any_work(self) -> None:
+        bad_values = (" ", "\t", "claude-opus-5-5-high ", " gemini-4-argon-high", "gemini-pro", "CLAUDE-OPUS-5-5-HIGH")
+        for bad in bad_values:
+            for is_dry in (True, False):
+                with self.subTest(value=bad, dry=is_dry):
+                    os.environ["AGY_MODEL"] = bad
+                    with (
+                        mock.patch.object(subprocess, "run", side_effect=AssertionError("must not run")) as run_mock,
+                        mock.patch.object(shutil, "which", side_effect=AssertionError("no prerequisite checks")),
+                        mock.patch.object(
+                            run_adapter.harness,
+                            "load_and_validate_harness",
+                            side_effect=AssertionError("model must be resolved first"),
+                        ),
+                    ):
+                        code, out, err = self._invoke_main(
+                            self._base_cli_args(dry_run=is_dry), env_path=str(self.fake_bin)
+                        )
+                    self.assertEqual(code, 2)
+                    self.assertEqual(out, "")
+                    self.assertTrue(err.startswith("BLOCKED"), msg=err)
+                    self.assertIn("AGY_MODEL", err)
+                    self.assertNotIn("Traceback", err)
+                    self.assertEqual(run_mock.call_count, 0)
+                    self.assertEqual(os.environ["AGY_MODEL"], bad)
+
+    def test_max_reworks_override_propagates_and_invalid_values_are_rejected(self) -> None:
+        for override, expected in ((0, "0"), (1, "1"), (2, "2"), (None, "2")):
+            with self.subTest(override=override):
+                code, out, err = self._invoke_main(
+                    self._base_cli_args(max_reworks=override, dry_run=True)
+                )
+                self.assertEqual(code, 0, msg=err)
+                parsed = shlex.split(out.strip())
+                self.assertEqual(parsed[parsed.index("--max-reworks") + 1], expected)
+                self.assertEqual(parsed.count("--max-reworks"), 1)
+                self.assertIn("--no-resume-worker", parsed)
+
+        code_real, err_real, calls = self._capture_real_run(self._base_cli_args(max_reworks=1))
+        self.assertEqual(code_real, 0, msg=err_real)
+        self.assertEqual(len(calls), 1)
+        real_argv = calls[0][0]
+        self.assertEqual(real_argv[real_argv.index("--max-reworks") + 1], "1")
+        self.assertEqual(real_argv[-1], "--no-resume-worker")
+
+        for bad_cli in ("3", "-1", "not-an-int", "1.5"):
+            for is_dry in (True, False):
+                with mock.patch.object(subprocess, "run", side_effect=AssertionError("must not run")):
+                    code, out, err = self._invoke_main(
+                        self._base_cli_args(max_reworks=bad_cli, dry_run=is_dry),
+                        env_path=str(self.fake_bin),
+                    )
+                self.assertNotEqual(code, 0, msg=f"max_reworks={bad_cli} dry={is_dry}")
+                self.assertEqual(out, "")
+                self.assertIn("BLOCKED", err)
+                self.assertNotIn("Traceback", err)
+
+        for bad_api in (True, False, -1, 3, "1", 1.0):
+            with self.subTest(bad_api=bad_api), self.assertRaises(ContractError):
+                run_adapter.prepare_run(
+                    workspace=self.ws,
+                    packet_path=self.pkt,
+                    scope=["src/service.ts"],
+                    verify_cmds=["npm test"],
+                    output_dir=self.out_dir,
+                    work_kind="task",
+                    profiles=["frontend"],
+                    max_reworks=bad_api,  # type: ignore[arg-type]
+                    skills_root=self.skills_root,
+                    dry_run=True,
+                )
+
+        plan = run_adapter.prepare_run(
+            workspace=self.ws,
+            packet_path=self.pkt,
+            scope=["src/service.ts"],
+            verify_cmds=["npm test"],
+            output_dir=self.out_dir,
+            work_kind="task",
+            profiles=["frontend"],
+            max_reworks=0,
+            skills_root=self.skills_root,
+            dry_run=True,
+        )
+        self.assertEqual(plan["max_reworks"], 0)
+        for bad_build in (3, -1, True):
+            with self.assertRaises(ContractError):
+                run_adapter.build_runner_argv(
+                    self.runner_script,
+                    plan["contract"],
+                    min_reviewers=1,
+                    max_reworks=bad_build,  # type: ignore[arg-type]
+                    worker_timeout=1800,
+                )
+
+        # A valid rework budget never unblocks quant work.
+        quant_pkt = self.base / "quant-budget.md"
+        quant_pkt.write_text("TASK: Compute PnL\nWORK_KIND: quant\nQUANT_SEAM: true\n", encoding="utf-8")
+        with mock.patch.object(subprocess, "run", side_effect=AssertionError("must not run")):
+            code_q, _, err_q = self._invoke_main(
+                self._base_cli_args(
+                    packet=quant_pkt, work_kind="quant", profiles=["quant"], max_reworks=0, dry_run=True
+                )
+            )
+        self.assertNotEqual(code_q, 0)
+        self.assertIn("BLOCKED", err_q)
+
     def test_direct_script_cli_entrypoint_works_without_package_context(self) -> None:
         script_path = REPO_ROOT / "scripts" / "harness.py"
         cli_argv = [str(script_path), *self._base_cli_args(dry_run=True)]
@@ -884,8 +1075,9 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0, msg=stderr_buf.getvalue())
         self.assertEqual(stderr_buf.getvalue(), "")
         parsed = shlex.split(stdout_buf.getvalue().strip())
-        self.assertEqual(parsed[0], sys.executable)
-        self.assertEqual(parsed[1], str(self.runner_script))
+        self.assertEqual(parsed[0], "AGY_MODEL=gemini-4-argon-high")
+        self.assertEqual(parsed[1], sys.executable)
+        self.assertEqual(parsed[2], str(self.runner_script))
 
 
 if __name__ == "__main__":

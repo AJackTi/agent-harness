@@ -3,6 +3,11 @@
 import os, re, shlex
 from pathlib import Path, PurePosixPath
 
+try:
+  from scripts import model_policy
+except ImportError:
+  import model_policy  # type: ignore[no-redef]
+
 CLASSIFICATION_RESPONSIBILITY = "Semantic task classification remains the coordinator's responsibility."
 PROFILES = {"backend/typescript", "backend/golang", "backend/rust", "frontend", "dashboard", "ios", "android", "quant", "devops", "data"}
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -48,8 +53,10 @@ def validate_run_contract(
   """Validate run inputs and packet contract without side effects or process dispatch."""
   _req(isinstance(policy, dict))
   try:
-    em, rn, bd, qp = policy["execution_model"], policy["runners"], policy["protected_boundaries"], policy["quant_policy"]
-    _req(em["mode"] == "external-first" and em["worker_cli"] == "agy" and em["pinned_model"] == "gemini-4-argon-high" and em["pinned_effort"] == "high" and "--no-resume-worker" in em["required_runner_flags"] and bd["require_output_dir_outside_workspace"] is True and qp["allow_quant_under_general_task"] is False)
+    em, rn, bd, qp, wv = policy["execution_model"], policy["runners"], policy["protected_boundaries"], policy["quant_policy"], policy["worker_validation"]
+    model_policy.validate_model_policy(policy)
+    _req(not {"pinned_model", "forbid_model_override"} & em.keys() and em["forbid_unsupported_models"] is True and em["permission_mode"] == "request-review" and wv["require_exact_init_model"] == "selected_model" and wv["require_init_permission_mode"] == "request-review" and wv["missing_permission_mode_blocks"] is True)
+    _req(em["mode"] == "external-first" and em["worker_cli"] == "agy" and em["pinned_effort"] == "high" and "--no-resume-worker" in em["required_runner_flags"] and bd["require_output_dir_outside_workspace"] is True and qp["allow_quant_under_general_task"] is False)
     pfx = {str(x).lower() for x in (*bd["forbidden_scope_prefixes"], *bd["protected_filenames"], *bd["require_explicit_approval_for"])}
     pfiles = {PurePosixPath(str(x)).as_posix().lower() for x in bd["harness_protected_files"]}
     qkws, qmsg = [str(x).lower() for x in qp["quant_seam_keywords"]], str(rn["quant"].get("blocked_reason") or "stronger reviewer")
