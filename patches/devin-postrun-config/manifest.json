@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "skill": "antigravity-task-runner",
+  "observed_cli_version": "devin 3000.11.234 (92c83011d113)",
+  "patch_file": "runner.patch",
+  "patch_sha256": "c90d73f5a0aed00b3979ca24f85a97e3a3c85cc027cc24fcaf03c73809a90f3b",
+  "files": [
+    {
+      "path": "scripts/devin_worker.py",
+      "base_sha256": "9b1b1cf6f705dd61c47288d83c44026c223576fe2ea57ffdb97d71e38ee842ac",
+      "patched_sha256": "6324c7e14f77767a1477778fc9901c19b86c76f7ddf9321a911e01c57f8384a6"
+    },
+    {
+      "path": "tests/test_devin_worker.py",
+      "base_sha256": "21a163d43e6d3a2c4290a58ee7f4cf35eeb23723d862c6bdd4c53a28eb5d9b38",
+      "patched_sha256": "813cf6d3848d976d2bfbba6cd705641eede757fe45e728ffca664517efa8085f"
+    }
+  ]
+}

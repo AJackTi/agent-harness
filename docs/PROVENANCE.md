@@ -18,10 +18,11 @@ The design of `ajackti-agent-harness` draws organizational principles from two r
 ## 2. Independent Implementation & Strict Boundaries
 
 - **Original Implementation**:
-  - All source code ([../scripts/harness.py](../scripts/harness.py)), test suites ([../tests/test_harness.py](../tests/test_harness.py)), JSON schemas ([../harness.json](../harness.json), [../core/policy.json](../core/policy.json), `<domain>/profile.json`), and documentation in this repository were written from scratch for AJACKTI's personal needs.
+  - All harness source code ([../scripts/harness.py](../scripts/harness.py)), test suites ([../tests/test_harness.py](../tests/test_harness.py)), JSON schemas ([../harness.json](../harness.json), [../core/policy.json](../core/policy.json), `<domain>/profile.json`), and documentation in this repository were written from scratch for AJACKTI's personal needs.
   - This repository **does not copy source code** from `repository-harness` or `harness-engineering-demo`.
+  - [../patches/devin-postrun-config/runner.patch](../patches/devin-postrun-config/runner.patch) (pinned by [../patches/devin-postrun-config/manifest.json](../patches/devin-postrun-config/manifest.json) and documented in [../patches/devin-postrun-config/README.md](../patches/devin-postrun-config/README.md)) is an explicit `agy`-authored maintenance delta targeting two files (`scripts/devin_worker.py` and `tests/test_devin_worker.py`) in the separately installed `antigravity-task-runner` skill—not code from either reference repository and not a bundled runner.
 - **No Inherited Installer**:
   - `ajackti-agent-harness` **does not** inherit, use, or assume the installer of any reference project.
 - **No Bundled Skills**:
   - Execution runners such as `antigravity-task-runner` and `antigravity-sol-quant-runner` are independent skills installed under `~/.agents/skills` on the user's machine.
-  - [../scripts/harness.py](../scripts/harness.py) acts strictly as a thin adapter invoking `scripts/run_workflow.py` from the installed skill; it never vendors or rewrites the security gates of those runners here.
+  - [../scripts/harness.py](../scripts/harness.py) acts strictly as a thin adapter invoking `scripts/run_workflow.py` from the installed skill; it never vendors the runner or automatically applies/rewrites runner security gates at runtime. Pinned maintenance patches under `patches/` require explicit manual SHA-256 verification and application outside harness execution.
