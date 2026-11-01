@@ -69,7 +69,8 @@
     "resume_worker": false,
     "required_runner_flags": [
       "--no-resume-worker",
-      "--context-mode"
+      "--context-mode",
+      "--chatgpt-review"
     ],
     "forbid_unsupported_models": true,
     "forbid_effort_override": true
@@ -213,6 +214,41 @@
       "devin_usage_totals_key": "usage_totals.devin",
       "agy_usage_totals_key": "usage_totals.gemini",
       "max_confidence_percent": 99
+    },
+    "chatgpt_review": {
+      "cli_flag": "--chatgpt-review",
+      "default_mode": "scoped",
+      "allowed_modes": [
+        "scoped",
+        "off",
+        "baseline"
+      ],
+      "enabled_modes": [
+        "scoped",
+        "baseline"
+      ],
+      "off_explicit_override_only": true,
+      "baseline_explicit_measurement_only": true,
+      "execution_owner": "upstream_runner",
+      "only_after_native_pipeline_pass": true,
+      "reviewer_cli": "codex",
+      "pinned_model": "gpt-6.1-sol",
+      "reasoning_effort": "max",
+      "reviews_per_run": 1,
+      "fresh_ephemeral": true,
+      "read_only": true,
+      "require_output_outside_workspace": true,
+      "require_native_and_final_pass_when_enabled": true,
+      "fail_closed_on_missing_or_incomplete_proof": true,
+      "final_result_file": "workflow-final-result.json",
+      "preserved_native_files": [
+        "workflow-result.json",
+        "proof-pack.txt"
+      ],
+      "separate_from_native_artifacts": true,
+      "missing_or_partial_usage_counters": "unknown",
+      "allow_hooks_or_auto_rewrites": false,
+      "replaces_agy_or_quant_reviewers": false
     }
   },
   "runners": {
@@ -230,7 +266,8 @@
         "--max-reworks",
         "--worker-timeout",
         "--no-resume-worker",
-        "--context-mode"
+        "--context-mode",
+        "--chatgpt-review"
       ],
       "positional_packet": true,
       "execution_enabled": true

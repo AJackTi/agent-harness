@@ -112,6 +112,8 @@ class RunAdapterAndCliTests(unittest.TestCase):
             argv.extend(["--worker-timeout", str(overrides["worker_timeout"])])
         if overrides.get("max_reworks") is not None:
             argv.extend(["--max-reworks", str(overrides["max_reworks"])])
+        if overrides.get("chatgpt_review") is not None:
+            argv.extend(["--chatgpt-review", str(overrides["chatgpt_review"])])
         if overrides.get("dry_run"):
             argv.append("--dry-run")
         if overrides.get("extra_args"):
@@ -184,6 +186,8 @@ class RunAdapterAndCliTests(unittest.TestCase):
             "1800",
             "--context-mode",
             "lean",
+            "--chatgpt-review",
+            "scoped",
             "--no-resume-worker",
         ]
         self.assertNotIn("--kind", parsed_argv)
@@ -300,6 +304,7 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertEqual(
             called_argv[called_argv.index("--context-mode") + 1], "lean"
         )
+        self.assertEqual(called_argv[called_argv.index("--chatgpt-review") + 1], "scoped")
         self.assertIn("--no-resume-worker", called_argv)
 
         # When env_path is None, the inherited environment (including PATH) is preserved and
@@ -1609,6 +1614,62 @@ class RunAdapterAndCliTests(unittest.TestCase):
         self.assertEqual(parsed[2], "WORKFLOW_CONTEXT=lean")
         self.assertEqual(parsed[3], sys.executable)
         self.assertEqual(parsed[4], str(self.runner_script))
+
+    def test_chatgpt_review_modes_and_validation(self) -> None:
+        base_kw: dict[str, object] = {
+            "workspace": self.ws, "packet_path": self.pkt, "scope": ["src/service.ts"],
+            "verify_cmds": ["npm test"], "output_dir": self.out_dir, "work_kind": "task",
+            "profiles": ["frontend"], "skills_root": self.skills_root,
+        }
+        for raw_mode, exp_mode in (
+            (None, "scoped"), ("scoped", "scoped"), ("off", "off"), ("baseline", "baseline")
+        ):
+            with self.subTest(mode=raw_mode):
+                code_dry, out_dry, _ = self._invoke_main(
+                    self._base_cli_args(chatgpt_review=raw_mode, dry_run=True)
+                )
+                code_real, _, calls = self._capture_real_run(
+                    self._base_cli_args(chatgpt_review=raw_mode)
+                )
+                plan = run_adapter.prepare_run(**base_kw, chatgpt_review=raw_mode, dry_run=True)  # type: ignore[arg-type]
+                self.assertEqual((code_dry, code_real, plan["chatgpt_review_mode"]), (0, 0, exp_mode))
+                run_argv = calls[0][0]
+                self.assertEqual(shlex.split(out_dry.strip())[3:], run_argv)
+                self.assertEqual(run_argv.count("--chatgpt-review"), 1)
+                self.assertEqual(
+                    run_argv[-3:], ["--chatgpt-review", exp_mode, "--no-resume-worker"]
+                )
+                self.assertEqual(plan["argv"][-3:], run_argv[-3:])
+
+        with (
+            mock.patch.object(subprocess, "run", side_effect=AssertionError("no run")),
+            mock.patch.object(shutil, "which", side_effect=AssertionError("no which")),
+            mock.patch.object(
+                run_adapter.harness, "load_and_validate_harness", side_effect=AssertionError("no load")
+            ),
+        ):
+            for bad_cli in ("", " scoped", "SCOPED", "full"):
+                for is_dry in (True, False):
+                    with self.subTest(bad_cli=bad_cli, dry=is_dry):
+                        code_b, out_b, err_b = self._invoke_main(
+                            self._base_cli_args(chatgpt_review=bad_cli, dry_run=is_dry),
+                            env_path=str(self.fake_bin),
+                        )
+                        self.assertEqual((code_b, out_b, err_b.startswith("BLOCKED")), (2, "", True))
+            for bad_api in ("", " scoped", "SCOPED", "full", True, 1):
+                with self.subTest(bad_api=bad_api):
+                    with self.assertRaises(ContractError):
+                        run_adapter.prepare_run(**base_kw, chatgpt_review=bad_api)  # type: ignore[arg-type]
+                    with self.assertRaises(ContractError):
+                        run_adapter.build_runner_argv(
+                            self.runner_script, plan["contract"], min_reviewers=1,
+                            max_reworks=2, worker_timeout=1800, chatgpt_review=bad_api,  # type: ignore[arg-type]
+                        )
+
+        policy_no_flag = json.loads(json.dumps(harness.load_and_validate_harness(REPO_ROOT)["policy"]))
+        policy_no_flag["runners"]["task"]["supported_flags"].remove("--chatgpt-review")
+        with self.assertRaises(ContractError):
+            run_adapter.resolve_task_runner_script(self.skills_root, policy_no_flag)
 
 
 if __name__ == "__main__":

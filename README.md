@@ -197,6 +197,8 @@ python3 scripts/harness.py run \
   --work-kind quant
 ```
 
+By default (when `--chatgpt-review` is omitted in `task` runs), the shared installed runner and `harness.py run` use `--chatgpt-review scoped`, forwarding `--chatgpt-review scoped` once before `--no-resume-worker`. After native `PASS`, `upstream_runner` runs `1` fresh ephemeral read-only `codex` review (`gpt-6.1-sol`, `model_reasoning_effort=max`, ChatGPT auth) with per-call skill-catalog narrowing, requiring native+final `PASS` and writing compact effective `workflow-final-result.json` outside `--workspace` while preserving `workflow-result.json` and `proof-pack.txt`. Pass `--chatgpt-review off` only as an explicit override or `--chatgpt-review baseline` for explicit measurement; see [docs/WORKFLOW.md](docs/WORKFLOW.md) for full policy and all-in token accounting.
+
 This command fails closed with a `BLOCKED` status (non-zero exit code) and reports the unlock requirements documented in [quant/AGENTS.md](quant/AGENTS.md).
 
 ## 4. Honest Limitations

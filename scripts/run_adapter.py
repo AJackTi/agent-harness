@@ -34,8 +34,9 @@ except ImportError:
     import model_policy  # type: ignore[no-redef]
 
 try:
-    from scripts import workflow_policy
+    from scripts import final_review_policy, workflow_policy
 except ImportError:
+    import final_review_policy  # type: ignore[no-redef]
     import workflow_policy  # type: ignore[no-redef]
 
 ContractError = run_contract.ContractError
@@ -62,7 +63,18 @@ REQUIRED_TASK_RUNNER_FLAGS = {
     "--worker-timeout",
     "--no-resume-worker",
     "--context-mode",
+    final_review_policy.CHATGPT_REVIEW_FLAG,
 }
+
+
+def resolve_dispatch_chatgpt_review(raw_value: Any = None) -> str:
+    """Resolve the --chatgpt-review mode via the final-review policy resolver."""
+    try:
+        return final_review_policy.resolve_chatgpt_review(raw_value)
+    except ValueError as exc:
+        raise ContractError(
+            f"invalid {final_review_policy.CHATGPT_REVIEW_FLAG} selection: {exc}"
+        ) from exc
 
 
 def _require_positive_int(value: Any, label: str) -> int:
@@ -460,6 +472,7 @@ def build_runner_argv(
     max_reworks: int,
     worker_timeout: int,
     context_mode: str = workflow_policy.DEFAULT_CONTEXT,
+    chatgpt_review: str | None = final_review_policy.DEFAULT_MODE,
     python_executable: str | None = None,
 ) -> list[str]:
     """Build the exact argv list for antigravity-task-runner/scripts/run_workflow.py."""
@@ -506,12 +519,15 @@ def build_runner_argv(
         str(worker_timeout),
         "--context-mode",
         str(context_mode),
+        final_review_policy.CHATGPT_REVIEW_FLAG,
+        resolve_dispatch_chatgpt_review(chatgpt_review),
         "--no-resume-worker",
     ]
 
 
 def prepare_run(
     *,
+    chatgpt_review: str | None = None,
     workspace: str | Path,
     packet_path: str | Path,
     scope: Sequence[str],
@@ -542,6 +558,7 @@ def prepare_run(
     context_mode = resolve_dispatch_context(
         os.environ.get(workflow_policy.CONTEXT_ENV_VAR)
     )
+    chatgpt_review_mode = resolve_dispatch_chatgpt_review(chatgpt_review)
     expected_worker_model = resolve_expected_worker_model(
         worker_provider, selected_model
     )
@@ -686,6 +703,7 @@ def prepare_run(
         max_reworks=effective_max_reworks,
         worker_timeout=effective_timeout,
         context_mode=context_mode,
+        chatgpt_review=chatgpt_review_mode,
     )
     # Copy-pastable POSIX command with explicit AGY_MODEL, WORKFLOW_WORKER, and WORKFLOW_CONTEXT pins.
     env_assignments = [
@@ -710,6 +728,7 @@ def prepare_run(
         "dry_run": bool(dry_run),
         "prerequisites": prerequisites,
         "devin_support_scripts": devin_support_scripts,
+        "chatgpt_review_mode": chatgpt_review_mode,
     }
 
 
@@ -731,12 +750,14 @@ def execute_run(
     dry_run: bool = False,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    chatgpt_review: str | None = None,
 ) -> int:
     """Validate and either print dry-run shlex.join command or invoke antigravity-task-runner."""
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
     try:
         plan = prepare_run(
+            chatgpt_review=chatgpt_review,
             workspace=workspace,
             packet_path=packet_path,
             scope=scope,

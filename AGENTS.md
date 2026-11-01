@@ -35,6 +35,8 @@ This repository is the single source of authority for AJACKTI's multi-domain age
 8. **Result Reporting**:
    - Always report: `verdict`, `actual_model`, `worker_provider`, `worker_model`, `reviewer_model`, `context_mode`, `files`, `actual_check_exit_codes`, separate `usage_totals.devin` vs `usage_totals.gemini`, `confidence < 100%`, and `residual_uncertainty`.
 
+**Scoped Headless Final Review (`--chatgpt-review {scoped,off,baseline}`, default `scoped`; [scripts/final_review_policy.py](scripts/final_review_policy.py))**: Shared runner global default is `scoped` without a manual flag, and `harness.py run` forwards one `--chatgpt-review <mode>` (`off` explicit override; `baseline` measurement only) with `--no-resume-worker` and `--context-mode`. Native `PASS` runs `1` fresh ephemeral read-only `codex` review (`upstream_runner`-owned, `gpt-6.1-sol`, `model_reasoning_effort=max`, ChatGPT auth); `scoped` narrows the per-call catalog while keeping Superpowers `7.0.1`, workflow skills, and full diff/raw tests/proofs (no hooks, forced settings, auth/endpoint/permission edits, or repo-wide rewrites). Enabled modes require native+final `PASS` (incomplete proof `BLOCK`s), write compact `workflow-final-result.json` outside `--workspace` while preserving `workflow-result.json` and `proof-pack.txt`, never implement or replace `agy`/`quant`/stronger reviewers, and share the retry ledger and terminal mismatch/denial rules (`doctor` is not Codex readiness; see [docs/WORKFLOW.md](docs/WORKFLOW.md)).
+
 ## 2. Progressive Context Discovery
 
 - **Core Configuration & Policy**: [harness.json](harness.json), [core/policy.json](core/policy.json), [core/README.md](core/README.md), [core/AGENTS.template.md](core/AGENTS.template.md)

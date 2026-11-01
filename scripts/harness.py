@@ -13,8 +13,9 @@ import sys
 from typing import Any, Sequence, TextIO
 
 try:
-    from scripts import model_policy, workflow_policy
+    from scripts import final_review_policy, model_policy, workflow_policy
 except ImportError:
+    import final_review_policy  # type: ignore[no-redef]
     import model_policy  # type: ignore[no-redef]
     import workflow_policy  # type: ignore[no-redef]
 
@@ -51,6 +52,7 @@ EXPECTED_PIPELINE_STAGES = [
 EXPECTED_REQUIRED_RUNNER_FLAGS = (
     "--no-resume-worker",
     "--context-mode",
+    final_review_policy.CHATGPT_REVIEW_FLAG,
 )
 EXPECTED_FAIL_CLOSED_CONDITIONS = {
     "missing_cli",
@@ -314,6 +316,7 @@ def _validate_policy(policy: dict[str, Any], repo_root: Path) -> None:
     try:
         model_policy.validate_model_policy(policy)
         workflow_policy.validate_workflow_policy(policy)
+        final_review_policy.validate_final_review_policy(policy)
     except ValueError as exc:
         raise HarnessError(f"{ctx}: {exc}") from exc
     if _require_nonempty_str(exec_model, "pinned_effort", em_ctx) != "high":
@@ -1670,6 +1673,13 @@ def _build_parser() -> _HarnessArgumentParser:
         ),
     )
     p_run.add_argument(
+        final_review_policy.CHATGPT_REVIEW_FLAG,
+        dest="chatgpt_review",
+        choices=final_review_policy.ALLOWED_MODES,
+        default=final_review_policy.DEFAULT_MODE,
+        help="Final-review mode after native pipeline pass (default: scoped).",
+    )
+    p_run.add_argument(
         "--skills-root",
         type=Path,
         default=None,
@@ -1881,6 +1891,7 @@ def main(
             task_id=args.task_id,
             worker_timeout=args.worker_timeout,
             max_reworks=args.max_reworks,
+            chatgpt_review=args.chatgpt_review,
             repo_root=effective_repo_root,
             skills_root=effective_skills_root,
             env_path=env_path,

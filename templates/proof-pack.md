@@ -44,6 +44,11 @@
   - Extra executions consumed / remaining: `<UNRESOLVED:EXTRA_EXECUTIONS_CONSUMED_AND_REMAINING>`
   - `--max-reworks` passed per run (`0..2`): `<UNRESOLVED:MAX_REWORKS_PER_RUN>`
   - Original snapshot and aggregate diff review (partial edits disclosed): `<UNRESOLVED:SNAPSHOT_AND_AGGREGATE_REVIEW>`
+- **Headless ChatGPT Final Review (`--chatgpt-review {scoped,off,baseline}`, default `scoped`; shares retry ledger & terminal mismatch/denial rules; never replaces `agy`/`quant` reviewers; see [../docs/WORKFLOW.md](../docs/WORKFLOW.md))**:
+  - Requested `--chatgpt-review` mode vs observed native/final verdict & proof (both `PASS` required when enabled; incomplete proof `BLOCKED`): `<UNRESOLVED:CHATGPT_REVIEW_MODE_VS_NATIVE_FINAL_VERDICT_PROOF>`
+  - Codex CLI pin (`codex`, `gpt-6.1-sol`, `model_reasoning_effort=max`, `1` fresh read-only review after native `PASS` via ChatGPT auth; pin is not backend attestation): `<UNRESOLVED:CODEX_FINAL_REVIEW_PIN_AND_PROOF>`
+  - Artifact paths outside `--workspace` (`workflow-final-result.json`, preserved `workflow-result.json` & `proof-pack.txt`): `<UNRESOLVED:FINAL_AND_PRESERVED_NATIVE_ARTIFACT_PATHS>`
+  - All-in headless tokens (`unknown` if incomplete; headless/provider I/O only, not Desktop history; separate `usage_totals.devin` vs `usage_totals.gemini`; offline CI != live availability): `<UNRESOLVED:ALL_IN_HEADLESS_TOKENS_OR_UNKNOWN>`
 
 ## 5. Residual Uncertainty
 
